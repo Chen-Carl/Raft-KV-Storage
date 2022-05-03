@@ -6,6 +6,6 @@ import com.zoecarl.raft.Raft;
 
 public class AddPeerService implements ServiceProvider {
     public void handleAddPeer(AddPeerReq req, Raft selfNode) {
-
+        
     }
 }

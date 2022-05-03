@@ -1,14 +1,19 @@
 package com.zoecarl.common;
 
 import java.util.List;
+import java.io.Serializable;
 import java.util.ArrayList;
 
-public class Peers {
-    public class Peer {
+public class Peers implements Serializable {
+    public class Peer implements Serializable {
         private final String addr;
 
         public Peer(String addr) {
             this.addr = addr;
+        }
+
+        public Peer(String hostname, int port) {
+            this.addr = hostname + ":" + port;
         }
 
         public String getAddr() {
@@ -43,6 +48,10 @@ public class Peers {
 
     public void removePeer(Peer peer) {
         list.remove(peer);
+    }
+
+    public void setSelf(String hostname, int port) {
+        self = new Peer(hostname, port);
     }
 
     public void setSelf(Peer self) {

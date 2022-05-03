@@ -6,6 +6,7 @@ import com.zoecarl.rpc.RpcClient;
 import com.zoecarl.raft.raftrpc.common.Request;
 import com.zoecarl.raft.raftrpc.common.Response;
 import com.zoecarl.raft.raftrpc.common.AddPeerReq;
+import com.zoecarl.raft.raftrpc.common.RemovePeerReq;
 import com.zoecarl.raft.raftrpc.common.ReqVoteReq;
 import com.zoecarl.raft.raftrpc.service.ReqVoteService;
 import com.zoecarl.raft.raftrpc.service.AddPeerService;
@@ -22,7 +23,7 @@ public class RaftRpcClient extends RpcClient {
         resetConnection(host, port);
         Class<ReqVoteService> serviceClass = ReqVoteService.class;
         try {
-            Method method = serviceClass.getMethod("handleRequestVote", Request.class, Raft.class);
+            Method method = serviceClass.getMethod("handleRequestVote", ReqVoteReq.class, Raft.class);
             Object[] arguments = { req };
             Object obj = callRemoteProcedure(method, arguments, 1000, 1);
             return obj;
@@ -42,7 +43,21 @@ public class RaftRpcClient extends RpcClient {
         resetConnection(host, port);
         Class<AddPeerService> serviceClass = AddPeerService.class;
         try {
-            Method method = serviceClass.getMethod("handleAddPeer", Request.class);
+            Method method = serviceClass.getMethod("handleAddPeer", AddPeerReq.class, Raft.class);
+            Object[] arguments = { req };
+            callRemoteProcedure(method, arguments, 1000, 1);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void removePeerRpc(RemovePeerReq req) {
+        String host = req.getHostname();
+        int port = req.getPort();
+        resetConnection(host, port);
+        Class<AddPeerService> serviceClass = AddPeerService.class;
+        try {
+            Method method = serviceClass.getMethod("handleRemovePeer", Request.class, Raft.class);
             Object[] arguments = { req };
             callRemoteProcedure(method, arguments, 1000, 1);
         } catch (Exception e) {

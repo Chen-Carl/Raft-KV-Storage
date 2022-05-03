@@ -11,8 +11,9 @@ import com.zoecarl.raft.raftrpc.service.AppendEntriesService;
 import com.zoecarl.raft.raftrpc.service.ReqVoteService;
 import com.zoecarl.rpc.RpcServer;
 
-public class RaftRpcServer extends RpcServer {
-    Raft selfNode;
+public class RaftRpcServer extends RpcServer implements Runnable {
+    private Thread t;
+    private Raft selfNode;
 
     public RaftRpcServer(int port, Raft raft) {
         super(port);
@@ -52,6 +53,19 @@ public class RaftRpcServer extends RpcServer {
             logger.error("handle rpc request error", e);
         } catch (ClassNotFoundException e) {
             logger.error("read object error: ", e);
+        }
+    }
+
+    @Override
+    public void run() {
+        launch();
+    }
+
+    public void start() {
+        System.out.println("Starting raft server...");
+        if (t == null) {
+            t = new Thread(this, "raft server");
+            t.start();
         }
     }
 }

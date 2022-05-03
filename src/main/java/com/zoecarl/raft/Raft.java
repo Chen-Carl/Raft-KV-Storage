@@ -11,6 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import com.zoecarl.common.LogEntry;
 import com.zoecarl.common.Peers;
+import com.zoecarl.common.Peers.Peer;
 import com.zoecarl.concurr.RaftThreadPool;
 import com.zoecarl.raft.raftrpc.RaftRpcClient;
 import com.zoecarl.raft.raftrpc.RaftRpcServer;
@@ -41,11 +42,12 @@ public class Raft {
 
     private RaftRpcClient raftRpcClient;
     private RaftRpcServer raftRpcServer;
+    private ClusterManager clusterManager;
     
     private ElectionTask electionTask = new ElectionTask();
 
-    ConcurrentHashMap<Peers.Peer, Integer> nextIndex;
-    ConcurrentHashMap<Peers.Peer, Integer> matchIndex;
+    ConcurrentHashMap<Peer, Integer> nextIndex;
+    ConcurrentHashMap<Peer, Integer> matchIndex;
 
     public Raft(String host, int port) {
         this.state = ServerState.FOLLOWER;
@@ -57,17 +59,40 @@ public class Raft {
 
     public void init(boolean launchServer) {
         raftRpcServer = new RaftRpcServer(port, this);
-        raftRpcClient = new RaftRpcClient(host, port);
+        raftRpcClient = new RaftRpcClient(host, port + 1);
+        clusterManager = new ClusterManager(this);
+        String dbDir = "./rocksDB-raft/" + port;
+        String logsDir = dbDir + "/logModule";
+        logModule = new LogModule(dbDir, logsDir);
+        peers = new Peers();
+        peers.setSelf(host, port);
+        addPeer(getSelf());
         if (launchServer == true) {
-            raftRpcServer.launch();
+            raftRpcServer.start();
         }
+    }
+
+    public void init() {
+        init(true);
+    }
+
+    public void addPeer(Peer peer) {
+        clusterManager.addPeer(peer);
+    }
+
+    public void addPeer(String host, int port) {
+        clusterManager.addPeer(host, port);
+    }
+
+    public void removePeer(Peer peer) {
+        clusterManager.removePeer(peer);
     }
 
     public Peers getPeers() {
         return peers;
     }
 
-    public Peers.Peer getSelf() {
+    public Peer getSelf() {
         return peers.getSelf();
     }
 
@@ -87,13 +112,12 @@ public class Raft {
             currentTerm++;
             votedFor = getSelf().getAddr();
             ArrayList<Future<ReqVoteResp>> futureReqVoteResp = new ArrayList<>();
-            for (Peers.Peer peer : peers.getPeerList()) {
+            for (Peer peer : peers.getPeerList()) {
                 if (!peer.equals(peers.getSelf())) {
                     futureReqVoteResp.add(RaftThreadPool.submit(() -> {
-                        int lastTerm = 0;
                         LogEntry lastLogEntry = logModule.back();
-                        if (lastLogEntry != null) {
-                            lastTerm = lastLogEntry.getTerm();
+                        if (lastLogEntry == null) {
+                            return null;
                         }
                         ReqVoteReq req = new ReqVoteReq(currentTerm, peer.getAddr(), getSelf().getAddr(), logModule.size() - 1, logModule.back().getTerm());
                         Object response = raftRpcClient.requestVoteRpc(req);
@@ -119,6 +143,7 @@ public class Raft {
                                 currentTerm = respTerm;
                             }
                         }
+                        return -1;
                     } catch (InterruptedException e) {
                         logger.error("Future.get(): ElectionTask interrupted", e);
                     } catch (ExecutionException e) {
@@ -142,17 +167,19 @@ public class Raft {
                 return;
             }
 
-            if (success.get() >= peers.size() / 2) {
+            if (success.get() >= (peers.size() + 1) / 2) {
                 logger.info("ElectionTask: node {} become leader", getSelf());
                 state = ServerState.LEADER;
                 nextIndex = new ConcurrentHashMap<>();
                 matchIndex = new ConcurrentHashMap<>();
-                for (Peers.Peer peer : peers.getPeerList()) {
+                for (Peer peer : peers.getPeerList()) {
                     if (peer != peers.getSelf()) {
                         nextIndex.put(peer, logModule.size());
                         matchIndex.put(peer, 0);
                     }
                 }
+            } else {
+                logger.info("ElectionTask failed: only {} votes get", success.get());
             }
             votedFor = "";
         }

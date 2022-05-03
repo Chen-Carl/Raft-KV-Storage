@@ -29,7 +29,7 @@ public class RaftThreadPoolExecutor extends ThreadPoolExecutor {
     public void afterExecute(Runnable r, Throwable t) {
         long start = startTime.get();
         long end = System.currentTimeMillis();
-        logger.info("Thread {} end, consumed time = {}", t.getMessage(), end - start);
+        logger.info("Runnable {} end, consumed time = {}", r.getClass(), end - start);
         startTime.remove();
     }
 
