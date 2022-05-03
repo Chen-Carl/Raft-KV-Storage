@@ -37,6 +37,18 @@ public class Peers {
     private volatile Peer leader;
     private volatile Peer self;
 
+    public void addPeer(Peer peer) {
+        list.add(peer);
+    }
+
+    public void removePeer(Peer peer) {
+        list.remove(peer);
+    }
+
+    public void setSelf(Peer self) {
+        this.self = self;
+    }
+
     public Peer getSelf() {
         return self;
     }
@@ -47,5 +59,9 @@ public class Peers {
 
     public int size() {
         return list.size();
+    }
+
+    public boolean count(Peer peer) {
+        return list.contains(peer);
     }
 }

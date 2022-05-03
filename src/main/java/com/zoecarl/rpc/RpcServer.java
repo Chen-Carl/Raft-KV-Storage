@@ -16,10 +16,10 @@ import org.slf4j.LoggerFactory;
 public class RpcServer {
     public static final int POOL_SIZE = 2 * Runtime.getRuntime().availableProcessors();
 
-    private static final Logger logger = LoggerFactory.getLogger(RpcServer.class);
+    protected static final Logger logger = LoggerFactory.getLogger(RpcServer.class);
     private ExecutorService executorService = new ThreadPoolExecutor(POOL_SIZE, POOL_SIZE, 0, TimeUnit.MILLISECONDS,
             new LinkedBlockingQueue<>());
-    private ServiceManager serviceManager = new ServiceManager();
+    protected ServiceManager serviceManager = new ServiceManager();
     private ServerSocket serverSocket;
 
     public RpcServer(ExecutorService executorService, ServiceManager serviceManager, ServerSocket serverSocket) {
@@ -64,7 +64,7 @@ public class RpcServer {
         }
     }
 
-    private void handleRPCRequest(Socket socket) {
+    protected void handleRPCRequest(Socket socket) {
         ObjectInputStream ois = null;
         ObjectOutputStream oos = null;
         try {
@@ -76,7 +76,7 @@ public class RpcServer {
             logger.info("receive rpc request, interfaceName: {}, methodName: {}, parameterTypes: {}, arguments: {}",
                     serviceClassName, methodName, parameterTypes, arguments);
             Object rt = serviceManager.executeService(serviceClassName, methodName, parameterTypes, arguments);
-            logger.info("execution successful, result: {}", rt);
+            logger.info("execution successful");
             oos = new ObjectOutputStream(socket.getOutputStream());
             oos.writeObject(rt);
             logger.info("result sent to client...");

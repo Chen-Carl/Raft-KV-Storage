@@ -19,7 +19,7 @@ public class ServiceManager {
         serviceMap.remove(serviceClass.getName());
     }
 
-    Object executeService(String serviceClass, String methodName, Class<?>[] parameterTypes, Object[] arguments) {
+    public Object executeService(String serviceClass, String methodName, Class<?>[] parameterTypes, Object[] arguments) {
         Object res;
         Class<?> service = serviceMap.get(serviceClass);
         if (service == null) {

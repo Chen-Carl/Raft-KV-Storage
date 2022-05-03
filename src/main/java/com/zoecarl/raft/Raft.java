@@ -10,14 +10,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.zoecarl.common.LogEntry;
-import com.zoecarl.common.ReqVoteArgs;
-import com.zoecarl.common.ReqVoteResp;
 import com.zoecarl.common.Peers;
 import com.zoecarl.concurr.RaftThreadPool;
 import com.zoecarl.raft.raftrpc.RaftRpcClient;
 import com.zoecarl.raft.raftrpc.RaftRpcServer;
-import com.zoecarl.raft.raftrpc.Request;
-import com.zoecarl.raft.raftrpc.Response;
+import com.zoecarl.raft.raftrpc.common.ReqVoteReq;
+import com.zoecarl.raft.raftrpc.common.ReqVoteResp;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,29 +35,47 @@ public class Raft {
     private int currentTerm;
     private String votedFor;
     private LogModule logModule;
-    private int port;
 
-    private RaftRpcClient raftRpcClient = new RaftRpcClient("host", -1);
-    private RaftRpcServer raftRpcServer = new RaftRpcServer(port);
+    private int port;
+    private String host;
+
+    private RaftRpcClient raftRpcClient;
+    private RaftRpcServer raftRpcServer;
+    
+    private ElectionTask electionTask = new ElectionTask();
 
     ConcurrentHashMap<Peers.Peer, Integer> nextIndex;
     ConcurrentHashMap<Peers.Peer, Integer> matchIndex;
 
-    public Raft() {
-        state = ServerState.FOLLOWER;
-        currentTerm = 0;
-        votedFor = null;
+    public Raft(String host, int port) {
+        this.state = ServerState.FOLLOWER;
+        this.currentTerm = 0;
+        this.votedFor = null;
+        this.host = host;
+        this.port = port;
     }
 
-    public void init() {
-        raftRpcServer.launch();
+    public void init(boolean launchServer) {
+        raftRpcServer = new RaftRpcServer(port, this);
+        raftRpcClient = new RaftRpcClient(host, port);
+        if (launchServer == true) {
+            raftRpcServer.launch();
+        }
     }
 
-    private Peers.Peer getSelf() {
+    public Peers getPeers() {
+        return peers;
+    }
+
+    public Peers.Peer getSelf() {
         return peers.getSelf();
     }
 
-    class ElectionTask implements Runnable {
+    public RaftRpcClient getClient() {
+        return raftRpcClient;
+    }
+
+    private class ElectionTask implements Runnable {
         @Override
         public void run() {
             if (state == ServerState.LEADER) {
@@ -79,10 +95,9 @@ public class Raft {
                         if (lastLogEntry != null) {
                             lastTerm = lastLogEntry.getTerm();
                         }
-                        ReqVoteArgs reqVoteArgs = new ReqVoteArgs(currentTerm, getSelf().getAddr(), peer.getAddr(), logModule.size() - 1, lastTerm);
-                        Request req = new Request(Request.RequestType.REQUEST_VOTE, reqVoteArgs);
-                        Response response = raftRpcClient.requestVoteRpc(req);
-                        return (ReqVoteResp) response.getResp();
+                        ReqVoteReq req = new ReqVoteReq(currentTerm, peer.getAddr(), getSelf().getAddr(), logModule.size() - 1, logModule.back().getTerm());
+                        Object response = raftRpcClient.requestVoteRpc(req);
+                        return (ReqVoteResp) response;
                     }));
                 }
             }
@@ -141,5 +156,9 @@ public class Raft {
             }
             votedFor = "";
         }
+    }
+
+    public void startElection() {
+        electionTask.run();
     }
 }

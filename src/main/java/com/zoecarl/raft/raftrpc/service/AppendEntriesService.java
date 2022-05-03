@@ -1,12 +1,13 @@
 package com.zoecarl.raft.raftrpc.service;
 
-import com.zoecarl.raft.raftrpc.Request;
-import com.zoecarl.raft.raftrpc.Response;
-import com.zoecarl.raft.raftrpc.Response.ResponseType;
+import com.zoecarl.raft.raftrpc.common.Request;
+import com.zoecarl.rpc.ServiceProvider;
+import com.zoecarl.raft.raftrpc.common.AppendEntriesResp;
+import com.zoecarl.raft.Raft;
 
-public class AppendEntriesService {
-    public Response handleAppendEntries(Request req) {
-        Response res = new Response(ResponseType.APPEND_ENTRIES, "world");
+public class AppendEntriesService implements ServiceProvider {
+    public AppendEntriesResp handleAppendEntries(Request req, Raft selfNode) {
+        AppendEntriesResp res = new AppendEntriesResp("world");
         return res;
     }
 }
