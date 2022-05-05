@@ -25,4 +25,16 @@ public class ReqVoteReq extends Request {
     public int getTerm() {
         return term;
     }
+
+    public String getCandidateId() {
+        return candidateId;
+    }
+
+    public int getLastLogIndex() {
+        return lastLogIndex;
+    }
+
+    public int getLastLogTerm() {
+        return lastLogTerm;
+    }
 }

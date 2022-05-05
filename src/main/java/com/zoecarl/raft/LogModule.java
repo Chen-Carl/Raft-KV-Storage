@@ -5,15 +5,15 @@ import java.io.File;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.Options;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 import com.alibaba.fastjson.JSON;
 
 import com.zoecarl.common.LogEntry;
 
 
 public class LogModule {
-    private static final Logger logger = LoggerFactory.getLogger(LogModule.class);
+    private static final Logger logger = LogManager.getLogger(LogModule.class);
     private final static byte[] LAST_INDEX_KEY = "LAST_INDEX_KEY".getBytes();
     private RocksDB logDB;
     private String dbDir;

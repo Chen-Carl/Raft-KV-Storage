@@ -8,4 +8,8 @@ public class LogEntry {
     public int getTerm() {
         return term;
     }
+
+    public int getIndex() {
+        return index;
+    }
 }

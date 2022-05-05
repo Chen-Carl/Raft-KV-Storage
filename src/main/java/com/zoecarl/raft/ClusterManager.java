@@ -1,7 +1,7 @@
 package com.zoecarl.raft;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 
 import com.zoecarl.common.Peers;
 import com.zoecarl.common.Peers.Peer;
@@ -9,7 +9,7 @@ import com.zoecarl.raft.raftrpc.common.AddPeerReq;
 import com.zoecarl.raft.raftrpc.common.RemovePeerReq;
 
 public class ClusterManager {
-    private static final Logger logger = LoggerFactory.getLogger(ClusterManager.class);
+    private static final Logger logger = LogManager.getLogger(ClusterManager.class);
 
     private Raft selfNode;
 
@@ -19,10 +19,10 @@ public class ClusterManager {
 
     synchronized public void addPeer(Peer newPeer) {
         Peers peers = selfNode.getPeers();
+        // TODO: replicate logs
         if (!peers.count(newPeer)) {
             peers.addPeer(newPeer);
         }
-        // TODO: replicate logs
 
         // TODO: RPC add peer
         for (Peer peer : peers.getPeerList()) {

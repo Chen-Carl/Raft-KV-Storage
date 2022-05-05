@@ -5,10 +5,14 @@ import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.io.IOException;
 
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+
 import com.zoecarl.raft.Raft;
 import com.zoecarl.raft.raftrpc.service.AddPeerService;
 import com.zoecarl.raft.raftrpc.service.AppendEntriesService;
 import com.zoecarl.raft.raftrpc.service.ReqVoteService;
+import com.zoecarl.raft.raftrpc.service.SayHelloService;
 import com.zoecarl.rpc.RpcServer;
 
 public class RaftRpcServer extends RpcServer implements Runnable {
@@ -21,6 +25,7 @@ public class RaftRpcServer extends RpcServer implements Runnable {
         super.register(ReqVoteService.class);
         super.register(AppendEntriesService.class);
         super.register(AddPeerService.class);
+        super.register(SayHelloService.class);
     }
 
     @Override
@@ -39,10 +44,10 @@ public class RaftRpcServer extends RpcServer implements Runnable {
             }
             newObjArr[arguments.length] = selfNode;
             arguments = newObjArr;
-            logger.info("receive rpc request, interfaceName: {}, methodName: {}, parameterTypes: {}, arguments: {}",
-                    serviceClassName, methodName, parameterTypes, arguments);
+            logger.info("\nreceive rpc request: \n\tinterfaceName: {}\n\tmethodName: {}\n\targuments: {}",
+                    serviceClassName, methodName,  arguments);
             Object rt = serviceManager.executeService(serviceClassName, methodName, parameterTypes, arguments);
-            logger.info("execution successful");
+            logger.info("{} execution successful", methodName);
             oos = new ObjectOutputStream(socket.getOutputStream());
             oos.writeObject(rt);
             logger.info("result sent to client...");

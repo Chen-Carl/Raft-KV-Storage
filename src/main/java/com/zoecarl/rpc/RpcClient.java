@@ -9,24 +9,33 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.lang.reflect.Method;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 
 public class RpcClient {
-    private static final Logger logger = LoggerFactory.getLogger(RpcClient.class);
+    private static final Logger logger = LogManager.getLogger(RpcClient.class);
 
-    private Socket socket = new Socket();
+    private String host;
+    private int port;
+
     private SocketAddress address;
 
     public RpcClient(String host, int port) {
+        this.host = host;
+        this.port = port;
         this.address = new InetSocketAddress(host, port);
     }
 
-    public void resetConnection(String host, int port) {
+    protected String getSelfAddr() {
+        return host + ":" + port;
+    }
+
+    public void resetAddr(String host, int port) {
         this.address = new InetSocketAddress(host, port);
     }
 
     public Object callRemoteProcedure(Method method, Object[] arguments, int timeout, int retries) {
+        Socket socket = new Socket();
         Object res = null;
         ObjectOutputStream oos = null;
         ObjectInputStream ois = null;

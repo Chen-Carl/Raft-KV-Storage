@@ -14,4 +14,8 @@ public class AddPeerReq extends Request {
         super(serverId, content);
         this.newPeer = newPeer;
     }
+
+    public String getPeerId() {
+        return newPeer.getAddr();
+    }
 }

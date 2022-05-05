@@ -58,6 +58,10 @@ public class Peers implements Serializable {
         this.self = self;
     }
 
+    public void setLeader(Peer leader) {
+        this.leader = leader;
+    }
+
     public Peer getSelf() {
         return self;
     }

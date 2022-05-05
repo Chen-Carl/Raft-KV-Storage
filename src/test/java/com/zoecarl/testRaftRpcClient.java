@@ -22,7 +22,7 @@ public class testRaftRpcClient {
     }
 
     public static void testAddPeer(RaftRpcClient client) {
-        client.resetConnection("127.0.0.1", 13308);
+        client.resetAddr("127.0.0.1", 13308);
         System.out.println("========== test add peer rpc ==========");
         Peers peers = new Peers();
         Peer newPeer = peers.new Peer("127.0.0.1", 13309);

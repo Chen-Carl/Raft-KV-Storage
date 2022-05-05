@@ -3,11 +3,11 @@ package com.zoecarl.rpc;
 import java.util.concurrent.ConcurrentHashMap;
 import java.lang.reflect.Method;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 
 public class ServiceManager {
-    private static final Logger logger = LoggerFactory.getLogger(ServiceManager.class);
+    private static final Logger logger = LogManager.getLogger(ServiceManager.class);
 
     private ConcurrentHashMap<String, Class<?>> serviceMap = new ConcurrentHashMap<>();
 
@@ -29,7 +29,6 @@ public class ServiceManager {
         try {
             Method method = service.getMethod(methodName, parameterTypes);
             res = method.invoke(service.getDeclaredConstructor().newInstance(), arguments);
-            System.out.println(arguments);
         } catch (NoSuchMethodException e) {
             logger.error("method not found, method name: {}", methodName);
             return null;

@@ -10,13 +10,13 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 
 public class RpcServer {
     public static final int POOL_SIZE = 2 * Runtime.getRuntime().availableProcessors();
 
-    protected static final Logger logger = LoggerFactory.getLogger(RpcServer.class);
+    protected static final Logger logger = LogManager.getLogger(RpcServer.class);
     private ExecutorService executorService = new ThreadPoolExecutor(POOL_SIZE, POOL_SIZE, 0, TimeUnit.MILLISECONDS,
             new LinkedBlockingQueue<>());
     protected ServiceManager serviceManager = new ServiceManager();

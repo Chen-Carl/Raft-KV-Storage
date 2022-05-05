@@ -7,6 +7,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.zoecarl.common.LogEntry;
@@ -15,17 +16,19 @@ import com.zoecarl.common.Peers.Peer;
 import com.zoecarl.concurr.RaftThreadPool;
 import com.zoecarl.raft.raftrpc.RaftRpcClient;
 import com.zoecarl.raft.raftrpc.RaftRpcServer;
+import com.zoecarl.raft.raftrpc.common.AppendEntriesReq;
+import com.zoecarl.raft.raftrpc.common.AppendEntriesResp;
 import com.zoecarl.raft.raftrpc.common.ReqVoteReq;
 import com.zoecarl.raft.raftrpc.common.ReqVoteResp;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 
 public class Raft {
 
-    public static final Logger logger = LoggerFactory.getLogger(Raft.class);
+    public static final Logger logger = LogManager.getLogger(Raft.class);
 
-    enum ServerState {
+    public enum ServerState {
         FOLLOWER,
         CANDIDATE,
         LEADER
@@ -43,11 +46,14 @@ public class Raft {
     private RaftRpcClient raftRpcClient;
     private RaftRpcServer raftRpcServer;
     private ClusterManager clusterManager;
-    
+
     private ElectionTask electionTask = new ElectionTask();
 
     ConcurrentHashMap<Peer, Integer> nextIndex;
     ConcurrentHashMap<Peer, Integer> matchIndex;
+
+    private volatile long preHeartBeatTime = 0;
+    private final long heartBeatTick = 5000;
 
     public Raft(String host, int port) {
         this.state = ServerState.FOLLOWER;
@@ -74,6 +80,7 @@ public class Raft {
 
     public void init() {
         init(true);
+        logger.info("raft node {} initialization successful", getSelfId());
     }
 
     public void addPeer(Peer peer) {
@@ -88,6 +95,18 @@ public class Raft {
         clusterManager.removePeer(peer);
     }
 
+    public void setState(ServerState state) {
+        this.state = state;
+    }
+
+    public void setCurrTerm(int currentTerm) {
+        this.currentTerm = currentTerm;
+    }
+
+    public void setVotedFor(String votedFor) {
+        this.votedFor = votedFor;
+    }
+
     public Peers getPeers() {
         return peers;
     }
@@ -100,42 +119,94 @@ public class Raft {
         return raftRpcClient;
     }
 
+    public int getCurrTerm() {
+        return currentTerm;
+    }
+
+    public String getSelfId() {
+        return host + ":" + port;
+    }
+
+    public String getVotedFor() {
+        return votedFor;
+    }
+
+    public LogModule getLogModule() {
+        return logModule;
+    }
+
     private class ElectionTask implements Runnable {
         @Override
         public void run() {
+            logger.warn("{} starts a election task", getSelfId());
+            logger.info("{} peers recorded", peers.getPeerList().size());
             if (state == ServerState.LEADER) {
                 return;
             }
             // TODO: random timeout
-
             state = ServerState.CANDIDATE;
             currentTerm++;
+            logger.info("{} receive a self vote", getSelfId());
             votedFor = getSelf().getAddr();
+
+            // test
+            // ArrayList<Future<String>> future = new ArrayList<>();
+            // for (Peer peer : peers.getPeerList()) {
+            // future.add(RaftThreadPool.submit(() -> {
+            // System.out.println("???????????????");
+            // return raftRpcClient.sayHelloRpc("zoecarl");
+            // }));
+            // }
+
+            // for (Future<String> f : future) {
+            // try {
+            // String res = f.get();
+            // System.out.println(res);
+            // } catch (InterruptedException | ExecutionException e) {
+            // e.printStackTrace();
+            // }
+            // }
+
             ArrayList<Future<ReqVoteResp>> futureReqVoteResp = new ArrayList<>();
             for (Peer peer : peers.getPeerList()) {
                 if (!peer.equals(peers.getSelf())) {
+                    // TODO: thread error
+                    logger.info("{} prepare the task sending a vote request to {}", getSelfId(), peer.getAddr());
                     futureReqVoteResp.add(RaftThreadPool.submit(() -> {
                         LogEntry lastLogEntry = logModule.back();
                         if (lastLogEntry == null) {
                             return null;
                         }
-                        ReqVoteReq req = new ReqVoteReq(currentTerm, peer.getAddr(), getSelf().getAddr(), logModule.size() - 1, logModule.back().getTerm());
-                        Object response = raftRpcClient.requestVoteRpc(req);
-                        return (ReqVoteResp) response;
+                        try {
+                            ReqVoteReq req = new ReqVoteReq(currentTerm, peer.getAddr(), getSelf().getAddr(),
+                                    logModule.size() - 1, logModule.back().getTerm());
+                            Object response = raftRpcClient.requestVoteRpc(req);
+                            return (ReqVoteResp) response;
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                            return null;
+                        }
                     }));
                 }
             }
 
-            AtomicInteger success = new AtomicInteger(0);
+            RaftThreadPool.shutdown();
+
+            logger.info("requests sent, espected {} responses",
+                    futureReqVoteResp.size());
+
+            AtomicInteger success = new AtomicInteger(1);
             CountDownLatch latch = new CountDownLatch(futureReqVoteResp.size());
             for (Future<ReqVoteResp> future : futureReqVoteResp) {
                 RaftThreadPool.submit(() -> {
                     try {
                         ReqVoteResp reqVoteResp = future.get(3000, TimeUnit.MILLISECONDS);
                         if (reqVoteResp == null) {
-                            return -1;
+                            logger.error("{} get null response", getSelfId());
+                            return 0;
                         }
                         if (reqVoteResp.isVoteGranted()) {
+                            logger.info("{} receive a vote", getSelfId());
                             success.incrementAndGet();
                         } else {
                             int respTerm = reqVoteResp.getTerm();
@@ -143,7 +214,7 @@ public class Raft {
                                 currentTerm = respTerm;
                             }
                         }
-                        return -1;
+                        return 0;
                     } catch (InterruptedException e) {
                         logger.error("Future.get(): ElectionTask interrupted", e);
                     } catch (ExecutionException e) {
@@ -167,7 +238,7 @@ public class Raft {
                 return;
             }
 
-            if (success.get() >= (peers.size() + 1) / 2) {
+            if (success.get() > peers.size() / 2) {
                 logger.info("ElectionTask: node {} become leader", getSelf());
                 state = ServerState.LEADER;
                 nextIndex = new ConcurrentHashMap<>();
@@ -187,5 +258,40 @@ public class Raft {
 
     public void startElection() {
         electionTask.run();
+    }
+
+    class HeartBeatTask implements Runnable {
+        @Override
+        public void run() {
+            if (state != ServerState.LEADER) {
+                return;
+            }
+            long current = System.currentTimeMillis();
+            if (current - preHeartBeatTime < heartBeatTick) {
+                return;
+            }
+
+            preHeartBeatTime = System.currentTimeMillis();
+            for (Peer peer : peers.getPeerList()) {
+                if (peer == peers.getSelf()) {
+                    continue;
+                }
+                AppendEntriesReq req = new AppendEntriesReq(peer.getAddr());
+                RaftThreadPool.execute(() -> {
+                    try {
+                        AppendEntriesResp resp = raftRpcClient.appendEntriesRpc(req);
+                        int term = resp.getTerm();
+                        if (term > currentTerm) {
+                            logger.warn("become a follower after receiving a higher term {}", term);
+                            currentTerm = term;
+                            votedFor = "";
+                            state = ServerState.FOLLOWER;
+                        }
+                    } catch (Exception e) {
+                        logger.error("append entries rpc failed at {}", peer.getAddr());
+                    }
+                }, false);
+            }
+        }
     }
 }
