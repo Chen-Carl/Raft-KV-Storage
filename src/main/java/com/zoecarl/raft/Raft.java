@@ -52,8 +52,10 @@ public class Raft {
     ConcurrentHashMap<Peer, Integer> nextIndex;
     ConcurrentHashMap<Peer, Integer> matchIndex;
 
-    private volatile long preHeartBeatTime = 0;
     private final long heartBeatTick = 5000;
+
+    public volatile long preHeartBeatTime = 0;
+    public volatile long preElectionTime = 0;
 
     public Raft(String host, int port) {
         this.state = ServerState.FOLLOWER;
@@ -105,6 +107,21 @@ public class Raft {
 
     public void setVotedFor(String votedFor) {
         this.votedFor = votedFor;
+    }
+
+    public void setLeader(Peer leader) {
+        peers.setLeader(leader);
+    }
+
+    public void setLeader(String leaderId) {
+        String host = leaderId.split(":")[0];
+        int port = Integer.parseInt(leaderId.split(":")[1]);
+        for (Peer peer : getPeers().getPeerList()) {
+            if (peer.getAddr().equals(host + ":" + port)) {
+                peers.setLeader(peer);
+                break;
+            }
+        }
     }
 
     public Peers getPeers() {

@@ -1,8 +1,8 @@
 package com.zoecarl.common;
 
 import java.util.List;
-import java.io.Serializable;
 import java.util.ArrayList;
+import java.io.Serializable;
 
 public class Peers implements Serializable {
     public class Peer implements Serializable {

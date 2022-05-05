@@ -3,7 +3,7 @@ package com.zoecarl.raft.raftrpc.common;
 import com.zoecarl.common.LogEntry;
 
 public class AppendEntriesReq extends Request {
-    private long term;
+    private int term;
     private String serverId;
     private String leaderId;
     private int prevLogIndex;
@@ -13,5 +13,17 @@ public class AppendEntriesReq extends Request {
     
     public AppendEntriesReq(String serverId) {
         super(serverId);
+    }
+
+    public LogEntry[] getEntries() {
+        return entries;
+    }
+
+    public String getLeaderId() {
+        return leaderId;
+    }
+
+    public int getTerm() {
+        return term;
     }
 }
