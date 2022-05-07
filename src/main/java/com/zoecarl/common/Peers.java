@@ -4,7 +4,11 @@ import java.util.List;
 import java.util.ArrayList;
 import java.io.Serializable;
 
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+
 public class Peers implements Serializable {
+    private static final Logger logger = LogManager.getLogger(Peers.class);
     public class Peer implements Serializable {
         private final String addr;
 
@@ -66,6 +70,10 @@ public class Peers implements Serializable {
         return self;
     }
 
+    public Peer getLeader() {
+        return leader;
+    }
+
     public List<Peer> getPeerList() {
         return list;
     }
@@ -76,5 +84,17 @@ public class Peers implements Serializable {
 
     public boolean count(Peer peer) {
         return list.contains(peer);
+    }
+
+    public void loadSettings(int nodeId, String settings) {
+        String[] lines = settings.split("\n");
+        for (int i = 0; i < lines.length; i++) {
+            String words[] = lines[i].split(" ");
+            if (i == nodeId) {
+                setSelf(words[0], Integer.parseInt(words[1]));
+            }
+            addPeer(new Peer(words[0], Integer.parseInt(words[1])));
+        }
+        logger.info("peers list: {}", list);
     }
 }

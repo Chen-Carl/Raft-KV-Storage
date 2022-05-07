@@ -1,4 +1,4 @@
-package com.zoecarl;
+package com.zoecarl.basic;
 
 import com.zoecarl.raft.LogModule;
 import com.alibaba.fastjson.JSON;
@@ -22,7 +22,7 @@ public class testRocksDB {
                 System.out.println(res);
             }
         }
-        LogEntry logEntry = new LogEntry(0, "hello rocksdb");
+        LogEntry logEntry = new LogEntry(0);
         logModule.write(logEntry);
         if (!logModule.empty()) {
             for (int i = 0; i < logModule.size(); i++) {
@@ -44,7 +44,7 @@ public class testRocksDB {
         }
 
         System.out.println("========== test LogEntry ==========");
-        LogEntry logEntry = new LogEntry(0, "hello rocksdb");
+        LogEntry logEntry = new LogEntry(0);
         System.out.println(logEntry);
         byte[] bytes = JSON.toJSONBytes(logEntry);
         LogEntry res = JSON.parseObject(bytes, LogEntry.class);

@@ -37,4 +37,15 @@ public class ReqVoteReq extends Request {
     public int getLastLogTerm() {
         return lastLogTerm;
     }
+
+    @Override
+    public String toString() {
+        return "ReqVoteReq{\n" +
+                "\tterm=" + term +
+                ", \n\tlastLogIndex=" + lastLogIndex +
+                ", \n\tlastLogTerm=" + lastLogTerm +
+                ", \n\tcandidateId='" + candidateId + '\'' +
+                ", \n\tserverId='" + getHostname() + ':' + getPort() + '\'' +
+                "\n}";
+    }
 }

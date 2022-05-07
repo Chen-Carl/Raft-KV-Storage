@@ -1,4 +1,4 @@
-package com.zoecarl;
+package com.zoecarl.basic;
 
 import com.zoecarl.rpc.RpcServer;
 import com.zoecarl.rpc.SayHello;

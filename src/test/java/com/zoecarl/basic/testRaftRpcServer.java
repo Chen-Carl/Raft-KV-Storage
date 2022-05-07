@@ -1,4 +1,4 @@
-package com.zoecarl;
+package com.zoecarl.basic;
 
 import com.zoecarl.raft.raftrpc.RaftRpcServer;
 import com.zoecarl.raft.Raft;

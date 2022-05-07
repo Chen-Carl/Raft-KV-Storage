@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -20,6 +21,7 @@ import com.zoecarl.raft.raftrpc.common.AppendEntriesReq;
 import com.zoecarl.raft.raftrpc.common.AppendEntriesResp;
 import com.zoecarl.raft.raftrpc.common.ReqVoteReq;
 import com.zoecarl.raft.raftrpc.common.ReqVoteResp;
+import com.zoecarl.utils.FileOp;
 
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
@@ -47,15 +49,25 @@ public class Raft {
     private RaftRpcServer raftRpcServer;
     private ClusterManager clusterManager;
 
+
     private ElectionTask electionTask = new ElectionTask();
+    private HeartBeatTask heartBeatTask = new HeartBeatTask();
 
     ConcurrentHashMap<Peer, Integer> nextIndex;
     ConcurrentHashMap<Peer, Integer> matchIndex;
 
-    private final long heartBeatTick = 5000;
+    private StateMachine stateMachine;
 
+    private final long heartBeatTick = 5000;
     public volatile long preHeartBeatTime = 0;
+    private volatile long electionTime = 15000;
     public volatile long preElectionTime = 0;
+
+    public Raft() {
+        this.state = ServerState.FOLLOWER;
+        this.currentTerm = 0;
+        this.votedFor = null;
+    }
 
     public Raft(String host, int port) {
         this.state = ServerState.FOLLOWER;
@@ -69,15 +81,34 @@ public class Raft {
         raftRpcServer = new RaftRpcServer(port, this);
         raftRpcClient = new RaftRpcClient(host, port + 1);
         clusterManager = new ClusterManager(this);
-        String dbDir = "./rocksDB-raft/" + port;
+        stateMachine = new StateMachine(port);
+        String dbDir = "./rocksDB-raft/" + port + "/logModule";
         String logsDir = dbDir + "/logModule";
         logModule = new LogModule(dbDir, logsDir);
         peers = new Peers();
         peers.setSelf(host, port);
-        addPeer(getSelf());
         if (launchServer == true) {
             raftRpcServer.start();
         }
+    }
+
+    public void init(int nodeId, String filename) {
+        peers = new Peers();
+        String settings = FileOp.readFile(filename);
+        peers.loadSettings(nodeId, settings);
+        String selfAddr[] = getSelf().getAddr().split(":");
+        this.host = selfAddr[0];
+        this.port = Integer.parseInt(selfAddr[1]);
+        String dbDir = "./rocksDB-raft/" + port;
+        String logsDir = dbDir + "/logModule";
+        logModule = new LogModule(dbDir, logsDir);
+        raftRpcServer = new RaftRpcServer(port, this);
+        raftRpcClient = new RaftRpcClient(host, port + 1);
+        clusterManager = new ClusterManager(this);
+        stateMachine = new StateMachine(port);
+        RaftThreadPool.scheduleAtFixedRate(electionTask, 5000, 15000);
+        RaftThreadPool.scheduleWithFixedDelay(heartBeatTask, 5000);
+        raftRpcServer.start();
     }
 
     public void init() {
@@ -144,12 +175,24 @@ public class Raft {
         return host + ":" + port;
     }
 
+    public String getLeaderId() {
+        return peers.getLeader().getAddr();
+    }
+
     public String getVotedFor() {
         return votedFor;
     }
 
     public LogModule getLogModule() {
         return logModule;
+    }
+
+    public StateMachine getStateMachine() {
+        return stateMachine;
+    }
+
+    public ServerState state() {
+        return state;
     }
 
     private class ElectionTask implements Runnable {
@@ -160,29 +203,17 @@ public class Raft {
             if (state == ServerState.LEADER) {
                 return;
             }
-            // TODO: random timeout
+            
+            long current = System.currentTimeMillis();
+            electionTime = electionTime + ThreadLocalRandom.current().nextInt(10000);
+            if (current - preElectionTime < electionTime) {
+                return;
+            }
+            
             state = ServerState.CANDIDATE;
             currentTerm++;
             logger.info("{} receive a self vote", getSelfId());
             votedFor = getSelf().getAddr();
-
-            // test
-            // ArrayList<Future<String>> future = new ArrayList<>();
-            // for (Peer peer : peers.getPeerList()) {
-            // future.add(RaftThreadPool.submit(() -> {
-            // System.out.println("???????????????");
-            // return raftRpcClient.sayHelloRpc("zoecarl");
-            // }));
-            // }
-
-            // for (Future<String> f : future) {
-            // try {
-            // String res = f.get();
-            // System.out.println(res);
-            // } catch (InterruptedException | ExecutionException e) {
-            // e.printStackTrace();
-            // }
-            // }
 
             ArrayList<Future<ReqVoteResp>> futureReqVoteResp = new ArrayList<>();
             for (Peer peer : peers.getPeerList()) {
@@ -191,12 +222,11 @@ public class Raft {
                     logger.info("{} prepare the task sending a vote request to {}", getSelfId(), peer.getAddr());
                     futureReqVoteResp.add(RaftThreadPool.submit(() -> {
                         LogEntry lastLogEntry = logModule.back();
-                        if (lastLogEntry == null) {
-                            return null;
-                        }
+                        int lastEntryTerm = lastLogEntry == null ? 0 : lastLogEntry.getTerm();
                         try {
                             ReqVoteReq req = new ReqVoteReq(currentTerm, peer.getAddr(), getSelf().getAddr(),
-                                    logModule.size() - 1, logModule.back().getTerm());
+                                    logModule.size() - 1, lastEntryTerm);
+                            // System.out.println(req);
                             Object response = raftRpcClient.requestVoteRpc(req);
                             return (ReqVoteResp) response;
                         } catch (Exception e) {
@@ -207,7 +237,7 @@ public class Raft {
                 }
             }
 
-            RaftThreadPool.shutdown();
+            // RaftThreadPool.shutdown();
 
             logger.info("requests sent, espected {} responses",
                     futureReqVoteResp.size());
@@ -267,7 +297,7 @@ public class Raft {
                     }
                 }
             } else {
-                logger.info("ElectionTask failed: only {} votes get", success.get());
+                logger.warn("ElectionTask failed: only {} votes get", success.get());
             }
             votedFor = "";
         }
@@ -283,6 +313,7 @@ public class Raft {
             if (state != ServerState.LEADER) {
                 return;
             }
+            logger.info("{} starts a heart beat task", getSelfId());
             long current = System.currentTimeMillis();
             if (current - preHeartBeatTime < heartBeatTick) {
                 return;

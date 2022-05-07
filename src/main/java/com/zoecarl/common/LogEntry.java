@@ -3,15 +3,17 @@ package com.zoecarl.common;
 public class LogEntry implements Comparable<LogEntry> {
     private int index;
     private int term;
-    private String content;
+    private String key;
+    private String value;
 
     public LogEntry(int term) {
         this.term = term;
     }
 
-    public LogEntry(int term, String content) {
+    public LogEntry(int term, String key, String value) {
         this.term = term;
-        this.content = content;
+        this.key = key;
+        this.value = value;
     }
 
     public void setIndex(int index) {
@@ -26,8 +28,12 @@ public class LogEntry implements Comparable<LogEntry> {
         return index;
     }
 
-    public String getContent() {
-        return content;
+    public String getKey() {
+        return key;
+    }
+
+    public String getValue() {
+        return value;
     }
 
     @Override
@@ -35,7 +41,8 @@ public class LogEntry implements Comparable<LogEntry> {
         return "LogEntry{" +
                 "index=" + index +
                 ", term=" + term +
-                ", content='" + content + '\'' +
+                ", key='" + key + '\'' +
+                ", value='" + value + '\'' +
                 '}';
     }
 
@@ -44,9 +51,9 @@ public class LogEntry implements Comparable<LogEntry> {
         if (log == null) {
             return -1;
         }
-        if (this.getIndex() > ((LogEntry) log).getIndex()) {
-            return 1;
+        if (this.getTerm() != log.getTerm()) {
+            return this.getTerm() - log.getTerm();
         }
-        return -1;
+        return this.getIndex() - log.getIndex();
     }
 }

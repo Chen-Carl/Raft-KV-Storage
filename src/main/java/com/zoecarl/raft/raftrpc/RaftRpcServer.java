@@ -67,10 +67,10 @@ public class RaftRpcServer extends RpcServer implements Runnable {
     }
 
     public void start() {
-        System.out.println("Starting raft server...");
         if (t == null) {
             t = new Thread(this, "raft server");
             t.start();
         }
+        logger.warn("raft server {} started", selfNode.getSelfId());
     }
 }

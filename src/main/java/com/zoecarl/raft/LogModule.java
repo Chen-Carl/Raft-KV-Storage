@@ -40,7 +40,7 @@ public class LogModule {
         try {
             logDB = RocksDB.open(options, logsDir);
         } catch (RocksDBException e) {
-            logger.error("cannot open rocksdb: ", e.getMessage());
+            logger.error("cannot open rocksdb: ", e);
         }
     }
 

@@ -1,4 +1,4 @@
-package com.zoecarl;
+package com.zoecarl.basic;
 
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;

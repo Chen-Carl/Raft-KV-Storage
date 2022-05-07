@@ -1,4 +1,4 @@
-package com.zoecarl;
+package com.zoecarl.basic;
 
 import com.zoecarl.common.Peers;
 import com.zoecarl.common.Peers.Peer;
