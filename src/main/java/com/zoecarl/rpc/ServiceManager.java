@@ -36,7 +36,7 @@ public class ServiceManager {
             logger.error("illegal access, method name: {}", methodName);
             return null;
         } catch (Exception e) {
-            logger.error("execute service error", e);
+            logger.error("execute service error, method name: {}, {}", methodName, e);
             return null;
         }
 

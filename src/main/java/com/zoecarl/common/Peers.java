@@ -31,14 +31,8 @@ public class Peers implements Serializable {
 
         @Override
         public boolean equals(Object p) {
-            if (this == p) {
-                return true;
-            }
-            if (p == null || getClass() != p.getClass()) {
-                return false;
-            }
-            Peer peer = (Peer) p;
-            return addr.equals(peer.getAddr());
+            Peer obj = (Peer) p;
+            return this.addr.equals(obj.getAddr());
         }
     }
 

@@ -39,7 +39,7 @@ public class Raft {
     private ServerState state;
     private Peers peers;
     private int currentTerm;
-    private String votedFor;
+    private String votedFor = "";
     private LogModule logModule;
 
     private int port;
@@ -66,13 +66,13 @@ public class Raft {
     public Raft() {
         this.state = ServerState.FOLLOWER;
         this.currentTerm = 0;
-        this.votedFor = null;
+        this.votedFor = "";
     }
 
     public Raft(String host, int port) {
         this.state = ServerState.FOLLOWER;
         this.currentTerm = 0;
-        this.votedFor = null;
+        this.votedFor = "";
         this.host = host;
         this.port = port;
     }
@@ -198,8 +198,6 @@ public class Raft {
     private class ElectionTask implements Runnable {
         @Override
         public void run() {
-            logger.warn("{} starts a election task", getSelfId());
-            logger.info("{} peers recorded", peers.getPeerList().size());
             if (state == ServerState.LEADER) {
                 return;
             }
@@ -208,7 +206,12 @@ public class Raft {
             electionTime = electionTime + ThreadLocalRandom.current().nextInt(10000);
             if (current - preElectionTime < electionTime) {
                 return;
+            } else {
+                preElectionTime = current;
             }
+
+            logger.warn("{} starts a election task", getSelfId());
+            logger.info("{} peers recorded", peers.getPeerList().size());
             
             state = ServerState.CANDIDATE;
             currentTerm++;
@@ -286,12 +289,12 @@ public class Raft {
             }
 
             if (success.get() > peers.size() / 2) {
-                logger.info("ElectionTask: node {} become leader", getSelf());
+                logger.warn("ElectionTask: node {} become leader", getSelf());
                 state = ServerState.LEADER;
                 nextIndex = new ConcurrentHashMap<>();
                 matchIndex = new ConcurrentHashMap<>();
                 for (Peer peer : peers.getPeerList()) {
-                    if (peer != peers.getSelf()) {
+                    if (!peer.equals(peers.getSelf())) {
                         nextIndex.put(peer, logModule.size());
                         matchIndex.put(peer, 0);
                     }
@@ -321,10 +324,10 @@ public class Raft {
 
             preHeartBeatTime = System.currentTimeMillis();
             for (Peer peer : peers.getPeerList()) {
-                if (peer == peers.getSelf()) {
+                if (peer.equals(peers.getSelf())) {
                     continue;
                 }
-                AppendEntriesReq req = new AppendEntriesReq(peer.getAddr());
+                AppendEntriesReq req = new AppendEntriesReq(getCurrTerm(), peer.getAddr());
                 RaftThreadPool.execute(() -> {
                     try {
                         AppendEntriesResp resp = raftRpcClient.appendEntriesRpc(req);
@@ -336,7 +339,7 @@ public class Raft {
                             state = ServerState.FOLLOWER;
                         }
                     } catch (Exception e) {
-                        logger.error("append entries rpc failed at {}", peer.getAddr());
+                        logger.error("append entries rpc failed at {}: {}", peer.getAddr(), e);
                     }
                 }, false);
             }

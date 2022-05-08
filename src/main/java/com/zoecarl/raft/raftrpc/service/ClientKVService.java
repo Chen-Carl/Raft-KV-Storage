@@ -53,7 +53,7 @@ public class ClientKVService implements ServiceProvider {
             ArrayList<Future<Boolean>> futures = new ArrayList<>();
             CopyOnWriteArrayList<Boolean> results = new CopyOnWriteArrayList<>();
             for (Peer peer : selfNode.getPeers().getPeerList()) {
-                if (peer != selfNode.getSelf()) {
+                if (!peer.equals(selfNode.getSelf())) {
                     // futures.add(replicate(peer, logEntry));
                     // TODO: replicate
                 }

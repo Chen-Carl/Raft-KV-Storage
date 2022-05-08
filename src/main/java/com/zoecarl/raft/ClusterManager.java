@@ -26,7 +26,7 @@ public class ClusterManager {
 
         // TODO: RPC add peer
         for (Peer peer : peers.getPeerList()) {
-            if (peer != selfNode.getSelf()) {
+            if (!peer.equals(selfNode.getSelf())) {
                 String hostname = peer.getAddr();
                 AddPeerReq req = new AddPeerReq(hostname, newPeer);
                 selfNode.getClient().addPeerRpc(req);
@@ -47,7 +47,7 @@ public class ClusterManager {
         }
         // TODO: RPC remove peer
         for (Peer peer : peers.getPeerList()) {
-            if (peer != selfNode.getSelf()) {
+            if (!peer.equals(selfNode.getSelf())) {
                 String hostname = peer.getAddr();
                 RemovePeerReq req = new RemovePeerReq(hostname, peer);
                 selfNode.getClient().removePeerRpc(req);

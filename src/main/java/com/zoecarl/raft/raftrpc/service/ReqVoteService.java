@@ -15,7 +15,11 @@ public class ReqVoteService implements ServiceProvider {
     synchronized public ReqVoteResp handleRequestVote(ReqVoteReq req, Raft selfNode) {
         logger.warn("{} receive a request vote request from {}", selfNode.getPeers().getSelf(), req.getCandidateId());
         if (req.getTerm() < selfNode.getCurrTerm()) {
-            logger.info("refuse to vote for {}, because term is smaller than current term", req.getCandidateId());
+            logger.info("refuse to vote for {}, because term {} is smaller than current term {}", req.getCandidateId(), req.getTerm(), selfNode.getCurrTerm());
+            return new ReqVoteResp(selfNode.getCurrTerm(), false);
+        }
+        if (selfNode.getVotedFor() != "") {
+            logger.info("refuse to vote for {}, because already voted for {}", req.getCandidateId(), selfNode.getVotedFor());
             return new ReqVoteResp(selfNode.getCurrTerm(), false);
         }
         if (req.getTerm() == selfNode.getCurrTerm()) {

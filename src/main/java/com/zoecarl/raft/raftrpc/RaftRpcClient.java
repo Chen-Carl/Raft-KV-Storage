@@ -15,6 +15,7 @@ import com.zoecarl.raft.raftrpc.common.ReqVoteReq;
 import com.zoecarl.raft.raftrpc.service.ReqVoteService;
 import com.zoecarl.raft.raftrpc.service.SayHelloService;
 import com.zoecarl.raft.raftrpc.service.AddPeerService;
+import com.zoecarl.raft.raftrpc.service.AppendEntriesService;
 import com.zoecarl.raft.Raft;
 
 public class RaftRpcClient extends RpcClient {
@@ -56,6 +57,24 @@ public class RaftRpcClient extends RpcClient {
     }
 
     public AppendEntriesResp appendEntriesRpc(AppendEntriesReq req) {
+        String host = req.getHostname();
+        int port = req.getPort();
+        resetAddr(host, port);
+        Class<AppendEntriesService> serviceClass = AppendEntriesService.class;
+        // handleAppendEntries(AppendEntriesReq req, Raft selfNode)
+        try {
+            Method method = serviceClass.getMethod("handleAppendEntries", AppendEntriesReq.class, Raft.class);
+            Object[] arguments = { req };
+            if (req.getEntries() == null) {
+                logger.info("LEADER send a heartbeat to {} with term={}", host + ":" + port, req.getTerm());
+            } else {
+                logger.info("{} send a append entries request to {}", req.getLeaderId(), host + ":" + port);
+            }
+            Object obj = callRemoteProcedure(method, arguments, 1000, 1);
+            return (AppendEntriesResp) obj;
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
         return null;
     }
 
