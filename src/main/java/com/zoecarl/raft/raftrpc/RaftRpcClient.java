@@ -21,6 +21,7 @@ import com.zoecarl.raft.Raft;
 public class RaftRpcClient extends RpcClient {
     private static final Logger logger = LogManager.getLogger(RaftRpcClient.class);
 
+    // Respond to RPCs from candidates and leaders
     public RaftRpcClient(String host, int port) {
         super(host, port);
     }
@@ -61,7 +62,6 @@ public class RaftRpcClient extends RpcClient {
         int port = req.getPort();
         resetAddr(host, port);
         Class<AppendEntriesService> serviceClass = AppendEntriesService.class;
-        // handleAppendEntries(AppendEntriesReq req, Raft selfNode)
         try {
             Method method = serviceClass.getMethod("handleAppendEntries", AppendEntriesReq.class, Raft.class);
             Object[] arguments = { req };

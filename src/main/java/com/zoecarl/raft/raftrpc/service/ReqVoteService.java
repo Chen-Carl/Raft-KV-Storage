@@ -9,16 +9,19 @@ import com.zoecarl.raft.raftrpc.common.ReqVoteResp;
 import com.zoecarl.rpc.ServiceProvider;
 import com.zoecarl.common.Peers;
 
+
 public class ReqVoteService implements ServiceProvider {
     static final Logger logger = LogManager.getLogger("server");
 
     synchronized public ReqVoteResp handleRequestVote(ReqVoteReq req, Raft selfNode) {
         logger.warn("{} receive a request vote request from {}", selfNode.getPeers().getSelf(), req.getCandidateId());
+        // Reply false if term < currentTerm
         if (req.getTerm() < selfNode.getCurrTerm()) {
             logger.info("refuse to vote for {}, because term {} is smaller than current term {}", req.getCandidateId(), req.getTerm(), selfNode.getCurrTerm());
             return new ReqVoteResp(selfNode.getCurrTerm(), false);
         }
-        if (selfNode.getVotedFor() != "") {
+        //  If votedFor is null or candidateId, and candidate’s log is at least as up-to-date as receiver’s log, grant vote
+        if (!selfNode.getVotedFor().equals("") && !selfNode.getVotedFor().equals(req.getCandidateId())) {
             logger.info("refuse to vote for {}, because already voted for {}", req.getCandidateId(), selfNode.getVotedFor());
             return new ReqVoteResp(selfNode.getCurrTerm(), false);
         }
@@ -28,11 +31,6 @@ public class ReqVoteService implements ServiceProvider {
                 logger.info("refuse to vote for {}, because last log index is smaller than current log index", req.getCandidateId());
                 return new ReqVoteResp(selfNode.getCurrTerm(), false);
             }
-        }
-        String votedFor = selfNode.getVotedFor();
-        if (!votedFor.isEmpty() && !votedFor.equals(req.getCandidateId())) {
-            logger.info("refuse to vote for {}, because already voted for {}", req.getCandidateId(), votedFor);
-            return new ReqVoteResp(selfNode.getCurrTerm(), false);
         }
 
         logger.info("vote for {}", req.getCandidateId());

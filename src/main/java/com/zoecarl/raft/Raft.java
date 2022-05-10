@@ -36,32 +36,42 @@ public class Raft {
         LEADER
     }
 
-    private ServerState state;
-    private Peers peers;
-    private int currentTerm;
-    private String votedFor = "";
-    private LogModule logModule;
+    // Persistent state on all servers (Updated on stable storage before responding to RPCs):
+    private int currentTerm = 0;    // latest term server has seen (initialized to 0 on first boot, increases monotonically)
+    private String votedFor = "";   // candidateId that received vote in current term (or null if none)
 
-    private int port;
-    private String host;
+    // Volatile state on all servers:
+    volatile int commitIndex = 0;   // index of highest log entry known to be committed (initialized to 0, increases monotonically)
+    volatile int lastApplied = 0;   // index of highest log entry applied to state machine (initialized to 0, increases monotonically)
 
-    private RaftRpcClient raftRpcClient;
-    private RaftRpcServer raftRpcServer;
+    // Volatile state on leaders (Reinitialized after election):
+    ConcurrentHashMap<Peer, Integer> nextIndex;     // for each server, index of the next log entry to send to that server (initialized to leader last log index + 1)
+    ConcurrentHashMap<Peer, Integer> matchIndex;    // for each server, index of highest log entry known to be replicated on server (initialized to 0, increases monotonically)
+
+    private ServerState state;      // node state
+    private Peers peers;            // cluster record
+    private LogModule logModule;    
+
+    private int port;               // server/client port client=server+1
+    private String host;            // hostname
+
+    private RaftRpcClient raftRpcClient;    // node client rpc
+    private RaftRpcServer raftRpcServer;    // node server rpc
     private ClusterManager clusterManager;
 
 
     private ElectionTask electionTask = new ElectionTask();
     private HeartBeatTask heartBeatTask = new HeartBeatTask();
 
-    ConcurrentHashMap<Peer, Integer> nextIndex;
-    ConcurrentHashMap<Peer, Integer> matchIndex;
+
 
     private StateMachine stateMachine;
 
-    private final long heartBeatTick = 5000;
+    private final long heartBeatTick = 3000;
     public volatile long preHeartBeatTime = 0;
-    private volatile long electionTime = 15000;
+    private volatile long electionTime = 10000;
     public volatile long preElectionTime = 0;
+
 
     public Raft() {
         this.state = ServerState.FOLLOWER;
@@ -106,7 +116,9 @@ public class Raft {
         raftRpcClient = new RaftRpcClient(host, port + 1);
         clusterManager = new ClusterManager(this);
         stateMachine = new StateMachine(port);
+        // If election timeout elapses without receiving AppendEntries RPC from current leader or granting vote to candidate: convert to candidate
         RaftThreadPool.scheduleAtFixedRate(electionTask, 5000, 15000);
+        // Upon election: send initial empty AppendEntries RPCs (heartbeat) to each server; repeat during idle periods to prevent election timeouts
         RaftThreadPool.scheduleWithFixedDelay(heartBeatTask, 5000);
         raftRpcServer.start();
     }
@@ -155,6 +167,10 @@ public class Raft {
         }
     }
 
+    public void setCommitIndex(int commitIndex) {
+        this.commitIndex = commitIndex;
+    }
+
     public Peers getPeers() {
         return peers;
     }
@@ -191,6 +207,10 @@ public class Raft {
         return stateMachine;
     }
 
+    public int getCommitIndex() {
+        return commitIndex;
+    }
+
     public ServerState state() {
         return state;
     }
@@ -206,18 +226,21 @@ public class Raft {
             electionTime = electionTime + ThreadLocalRandom.current().nextInt(10000);
             if (current - preElectionTime < electionTime) {
                 return;
-            } else {
-                preElectionTime = current;
             }
 
             logger.warn("{} starts a election task", getSelfId());
             logger.info("{} peers recorded", peers.getPeerList().size());
             
+            // On conversion to candidate, start election:
             state = ServerState.CANDIDATE;
+            // 1. Increment currentTerm
             currentTerm++;
+            // 2. Vote for self
             logger.info("{} receive a self vote", getSelfId());
             votedFor = getSelf().getAddr();
-
+            // 3. Reset election timer
+            preElectionTime = System.currentTimeMillis();
+            // 4. Send RequestVote RPCs to all other servers
             ArrayList<Future<ReqVoteResp>> futureReqVoteResp = new ArrayList<>();
             for (Peer peer : peers.getPeerList()) {
                 if (!peer.equals(peers.getSelf())) {
@@ -239,8 +262,6 @@ public class Raft {
                     }));
                 }
             }
-
-            // RaftThreadPool.shutdown();
 
             logger.info("requests sent, espected {} responses",
                     futureReqVoteResp.size());
@@ -284,10 +305,12 @@ public class Raft {
                 logger.error("latch.await(): ElectionTask interrupted", e);
             }
 
+            // If AppendEntries RPC received from new leader: convert to follower
             if (state == ServerState.FOLLOWER) {
                 return;
             }
 
+            // If votes received from majority of servers: become leader
             if (success.get() > peers.size() / 2) {
                 logger.warn("ElectionTask: node {} become leader", getSelf());
                 state = ServerState.LEADER;
