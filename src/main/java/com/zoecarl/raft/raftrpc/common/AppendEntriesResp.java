@@ -24,4 +24,8 @@ public class AppendEntriesResp extends Response {
     public int getTerm() {
         return term;
     }
+
+    public boolean success() {
+        return success;
+    }
 }

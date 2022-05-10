@@ -8,7 +8,6 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
-
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.zoecarl.common.LogEntry;
@@ -45,8 +44,8 @@ public class Raft {
     volatile int lastApplied = 0;   // index of highest log entry applied to state machine (initialized to 0, increases monotonically)
 
     // Volatile state on leaders (Reinitialized after election):
-    ConcurrentHashMap<Peer, Integer> nextIndex;     // for each server, index of the next log entry to send to that server (initialized to leader last log index + 1)
-    ConcurrentHashMap<Peer, Integer> matchIndex;    // for each server, index of highest log entry known to be replicated on server (initialized to 0, increases monotonically)
+    public ConcurrentHashMap<Peer, Integer> nextIndex;     // for each server, index of the next log entry to send to that server (initialized to leader last log index + 1)
+    public ConcurrentHashMap<Peer, Integer> matchIndex;    // for each server, index of highest log entry known to be replicated on server (initialized to 0, increases monotonically)
 
     private ServerState state;      // node state
     private Peers peers;            // cluster record
@@ -121,6 +120,7 @@ public class Raft {
         // Upon election: send initial empty AppendEntries RPCs (heartbeat) to each server; repeat during idle periods to prevent election timeouts
         RaftThreadPool.scheduleWithFixedDelay(heartBeatTask, 5000);
         raftRpcServer.start();
+        // RaftThreadPool.execute(raftRpcServer, false);
     }
 
     public void init() {
@@ -152,6 +152,10 @@ public class Raft {
         this.votedFor = votedFor;
     }
 
+    public void setLastApplied(int lastApplied) {
+        this.lastApplied = lastApplied;
+    }
+
     public void setLeader(Peer leader) {
         peers.setLeader(leader);
     }
@@ -177,6 +181,10 @@ public class Raft {
 
     public Peer getSelf() {
         return peers.getSelf();
+    }
+
+    public int getLastApplied() {
+        return lastApplied;
     }
 
     public RaftRpcClient getClient() {
@@ -244,7 +252,6 @@ public class Raft {
             ArrayList<Future<ReqVoteResp>> futureReqVoteResp = new ArrayList<>();
             for (Peer peer : peers.getPeerList()) {
                 if (!peer.equals(peers.getSelf())) {
-                    // TODO: thread error
                     logger.info("{} prepare the task sending a vote request to {}", getSelfId(), peer.getAddr());
                     futureReqVoteResp.add(RaftThreadPool.submit(() -> {
                         LogEntry lastLogEntry = logModule.back();

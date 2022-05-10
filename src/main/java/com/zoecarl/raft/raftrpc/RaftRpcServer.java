@@ -5,9 +5,6 @@ import java.io.ObjectOutputStream;
 import java.io.IOException;
 import java.net.Socket;
 
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.LogManager;
-
 import com.zoecarl.raft.Raft;
 import com.zoecarl.raft.raftrpc.service.AddPeerService;
 import com.zoecarl.raft.raftrpc.service.AppendEntriesService;

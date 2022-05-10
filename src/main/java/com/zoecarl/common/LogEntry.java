@@ -16,6 +16,13 @@ public class LogEntry implements Comparable<LogEntry> {
         this.value = value;
     }
 
+    public LogEntry(int index, int term, String key, String value) {
+        this.index = index;
+        this.term = term;
+        this.key = key;
+        this.value = value;
+    }
+
     public void setIndex(int index) {
         this.index = index;
     } 

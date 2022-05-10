@@ -15,6 +15,16 @@ public class AppendEntriesReq extends Request {
         this.term = term;
     }
 
+    public AppendEntriesReq(int term, String serverId, int prevLogIndex, String leaderId, int prevLogTerm, LogEntry[] entries, int leaderCommit) {
+        super(serverId);
+        this.term = term;
+        this.leaderId = leaderId;
+        this.prevLogIndex = prevLogIndex;
+        this.prevLogTerm = prevLogTerm;
+        this.entries = entries;
+        this.leaderCommit = leaderCommit;
+    }
+
     public LogEntry[] getEntries() {
         return entries;
     }

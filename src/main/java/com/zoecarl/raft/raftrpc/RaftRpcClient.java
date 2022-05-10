@@ -1,11 +1,13 @@
 package com.zoecarl.raft.raftrpc;
 
 import java.lang.reflect.Method;
+import java.util.HashMap;
 
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
 
 import com.zoecarl.rpc.RpcClient;
+import com.zoecarl.utils.FileOp;
 import com.zoecarl.raft.raftrpc.common.Request;
 import com.zoecarl.raft.raftrpc.common.AddPeerReq;
 import com.zoecarl.raft.raftrpc.common.AppendEntriesReq;
@@ -16,14 +18,37 @@ import com.zoecarl.raft.raftrpc.service.ReqVoteService;
 import com.zoecarl.raft.raftrpc.service.SayHelloService;
 import com.zoecarl.raft.raftrpc.service.AddPeerService;
 import com.zoecarl.raft.raftrpc.service.AppendEntriesService;
+import com.zoecarl.raft.raftrpc.service.ClientKVService;
+import com.zoecarl.common.ClientKVReq;
+import com.zoecarl.common.ClientKVResp;
+import com.zoecarl.common.ClientKVReq.Type;
 import com.zoecarl.raft.Raft;
 
 public class RaftRpcClient extends RpcClient {
     private static final Logger logger = LogManager.getLogger(RaftRpcClient.class);
 
+    private HashMap<String, Integer> serverList;    // used only for users
+    
+    public void initKVService(String filename) {
+        serverList = new HashMap<>();
+        String settings = FileOp.readFile(filename);
+        String[] lines = settings.split("\n");
+        for (String line : lines) {
+            String[] tokens = line.split(" ");
+            serverList.put(tokens[0], Integer.parseInt(tokens[1]));
+        }
+    }
+
     // Respond to RPCs from candidates and leaders
     public RaftRpcClient(String host, int port) {
         super(host, port);
+    }
+
+    public RaftRpcClient(String host, int port, boolean user) {
+        super(host, port);
+        if (user) {
+            initKVService("settings.txt");
+        }
     }
 
     public String sayHelloRpc(String msg) {
@@ -105,5 +130,42 @@ public class RaftRpcClient extends RpcClient {
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    // usr rpc
+    public boolean put(String key, String value) {
+        HashMap.Entry<?, ?> entry = serverList.entrySet().iterator().next();
+        String host = (String) entry.getKey();
+        int port = (int) entry.getValue();
+        resetAddr(host, port);
+        ClientKVReq req = new ClientKVReq(key, value, Type.PUT);
+        Class<ClientKVService> serviceClass = ClientKVService.class;
+        try {
+            Method method = serviceClass.getMethod("handleClientKVReq", ClientKVReq.class, Raft.class);
+            Object[] arguments = { req };
+            ClientKVResp success = (ClientKVResp) callRemoteProcedure(method, arguments, 1000, 1);
+            return (success.getValue() == "true" ? true : false);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    public String get(String key) {
+        HashMap.Entry<?, ?> entry = serverList.entrySet().iterator().next();
+        String host = (String) entry.getKey();
+        int port = (int) entry.getValue();
+        resetAddr(host, port);
+        ClientKVReq req = new ClientKVReq(key, null, Type.GET);
+        Class<ClientKVService> serviceClass = ClientKVService.class;
+        try {
+            Method method = serviceClass.getMethod("handleClientKVReq", ClientKVReq.class, Raft.class);
+            Object[] arguments = { req };
+            ClientKVResp success = (ClientKVResp) callRemoteProcedure(method, arguments, 1000, 1);
+            return success.getValue();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
     }
 }
