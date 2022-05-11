@@ -28,7 +28,9 @@ import com.zoecarl.raft.Raft;
 public class ClientKVService implements ServiceProvider {
     private static final Logger logger = LogManager.getLogger(ClientKVService.class);
 
-    ClientKVResp handleClientKV(ClientKVReq req, Raft selfNode) {
+    public ClientKVResp handleClientKVReq(ClientKVReq req, Raft selfNode) {
+        // TODO: try catch
+        try {
         logger.info("receive {} request, (k, v) = ({}, {})", req.getTypeString(), req.getKey(), req.getValue());
         if (selfNode.state() != Raft.ServerState.LEADER) {
             logger.warn("FOLLOWER {} redirect the request to LEADER {}", selfNode.getSelfId(), selfNode.getLeaderId());
@@ -61,11 +63,11 @@ public class ClientKVService implements ServiceProvider {
                     try {
                         results.add(future.get(3000, TimeUnit.MILLISECONDS));
                     } catch (InterruptedException e) {
-                        logger.error("remote log replication interrupted: ", e.getMessage());
+                        logger.error("remote log replication interrupted: {}", e.getMessage());
                     } catch (ExecutionException e) {
-                        logger.error("remote log replication execution exception: ", e.getMessage());
+                        logger.error("remote log replication execution exception: {}", e.getMessage());
                     } catch (TimeoutException e) {
-                        logger.error("remote log replication timeout: ", e.getMessage());
+                        logger.error("remote log replication timeout: {}", e.getMessage());
                     } finally {
                         latch.countDown();
                     }
@@ -108,12 +110,16 @@ public class ClientKVService implements ServiceProvider {
                 return new ClientKVResp(null, "false");
             }
         }
+        return new ClientKVResp(null, "false");
+    } catch (Exception e) {
+        logger.fatal("client kv fatal exception: {}", e);
         return null;
+    }
     }
 
     private ClientKVResp redirect(ClientKVReq req, Raft selfNode) {
         if (req.getType() == Type.PUT) {
-            boolean success = selfNode.getClient().put(req.getKey(), req.getValue());
+            boolean success = selfNode.getClient().putLeader(req.getKey(), req.getValue(), selfNode.getLeaderId());
             if (success) {
                 return new ClientKVResp(null, "true");
             }
@@ -128,29 +134,35 @@ public class ClientKVService implements ServiceProvider {
         return RaftThreadPool.submit(() -> {
             int nextIndex = selfNode.nextIndex.get(peer);
             ArrayList<LogEntry> logEntries = new ArrayList<>();
-            if (logEntry.getIndex() >= nextIndex) {
+            if (logEntry.getIndex() > nextIndex) {
                 for (int i = nextIndex; i <= logEntry.getIndex(); i++) {
                     LogEntry entry = selfNode.getLogModule().read(i);
-                    if (entry == null) {
+                    if (entry != null) {
                         logEntries.add(entry);
                     }
                 }
             } else {
                 logEntries.add(logEntry);
             }
+
+            LogEntry prevLogEntry = new LogEntry(-1, -1, null, null);
             LogEntry firstLogEntry = logEntries.get(0);
-            LogEntry prevLogEntry = selfNode.getLogModule().read(firstLogEntry.getIndex() - 1);
-            if (prevLogEntry == null) {
-                prevLogEntry = new LogEntry(0, 0, null, null);
+            if (firstLogEntry != null) {
+                LogEntry prevTmp = selfNode.getLogModule().read(firstLogEntry.getIndex() - 1);
+                if (prevTmp != null) {
+                    prevLogEntry = prevTmp;
+                }
             }
 
             LogEntry[] logEntriesArray = logEntries.toArray(new LogEntry[logEntries.size()]);
+
             int prevLogTerm = prevLogEntry.getTerm();
             int prevLogIndex = prevLogEntry.getIndex();
             AppendEntriesReq req = new AppendEntriesReq(selfNode.getCurrTerm(), peer.getAddr(), prevLogIndex,
                     selfNode.getLeaderId(), prevLogTerm, logEntriesArray, selfNode.getCommitIndex());
             AppendEntriesResp resp = selfNode.getClient().appendEntriesRpc(req);
             if (resp == null) {
+                logger.error("get null append entries response from {}", peer.getAddr());
                 return false;
             }
             if (resp.success()) {

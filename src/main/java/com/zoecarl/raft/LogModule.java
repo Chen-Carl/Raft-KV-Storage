@@ -84,7 +84,7 @@ public class LogModule {
             Integer index = size();
             logEntry.setIndex(index);
             logDB.put(index.toString().getBytes(), JSON.toJSONBytes(logEntry));
-            logger.info("write log entry: {}", logEntry);
+            logger.debug("write log entry: {}", logEntry);
             try {
                 logDB.put(LAST_INDEX_KEY, index.toString().getBytes());
             } catch (RocksDBException e) {
@@ -108,7 +108,7 @@ public class LogModule {
                 return null;
             }
             LogEntry log = JSON.parseObject(res, LogEntry.class);
-            logger.info("read log entry: {}", log);
+            logger.debug("read log entry: {}", log);
         } catch (InterruptedException e) {
             logger.error("read log entry error by interruption: ", e);
         } catch (RocksDBException e) {
@@ -125,7 +125,7 @@ public class LogModule {
             for (int i = startIndex; i < size(); i++) {
                 logDB.delete(String.valueOf(i).getBytes());
             }
-            logger.warn("rocksDB remove logs from start index {}, count = {}", startIndex, size() - startIndex);
+            logger.warn("log module remove logs from start index {}, count = {}", startIndex, size() - startIndex);
             try {
                 logDB.put(LAST_INDEX_KEY, ((Integer) (startIndex - 1)).toString().getBytes());
                 logger.warn("last index = {}", startIndex - 1);

@@ -10,9 +10,10 @@ public class AppendEntriesReq extends Request {
     private LogEntry[] entries;     // log entries to store (empty for heartbeat; may send more than one for efficiency)
     private int leaderCommit;       // leader’s commitIndex
     
-    public AppendEntriesReq(int term, String serverId) {
+    public AppendEntriesReq(int term, String leaderId, String serverId) {
         super(serverId);
         this.term = term;
+        this.leaderId = leaderId;
     }
 
     public AppendEntriesReq(int term, String serverId, int prevLogIndex, String leaderId, int prevLogTerm, LogEntry[] entries, int leaderCommit) {

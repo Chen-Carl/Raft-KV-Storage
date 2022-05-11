@@ -2,6 +2,7 @@ package com.zoecarl.rpc;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.lang.reflect.Method;
+import java.lang.reflect.InvocationTargetException;
 
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
@@ -34,6 +35,9 @@ public class ServiceManager {
             return null;
         } catch (IllegalAccessException e) {
             logger.error("illegal access, method name: {}", methodName);
+            return null;
+        } catch (InvocationTargetException e) {
+            logger.error("invocation target exception, method name: {}, {}", methodName, e);
             return null;
         } catch (Exception e) {
             logger.error("execute service error, method name: {}, {}", methodName, e);

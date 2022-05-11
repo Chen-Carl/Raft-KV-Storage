@@ -1,6 +1,8 @@
 package com.zoecarl.common;
 
-public class LogEntry implements Comparable<LogEntry> {
+import java.io.Serializable;
+
+public class LogEntry implements Comparable<LogEntry>, Serializable {
     private int index;
     private int term;
     private String key;

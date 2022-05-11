@@ -357,7 +357,7 @@ public class Raft {
                 if (peer.equals(peers.getSelf())) {
                     continue;
                 }
-                AppendEntriesReq req = new AppendEntriesReq(getCurrTerm(), peer.getAddr());
+                AppendEntriesReq req = new AppendEntriesReq(getCurrTerm(), getSelfId(), peer.getAddr());
                 RaftThreadPool.execute(() -> {
                     try {
                         AppendEntriesResp resp = raftRpcClient.appendEntriesRpc(req);

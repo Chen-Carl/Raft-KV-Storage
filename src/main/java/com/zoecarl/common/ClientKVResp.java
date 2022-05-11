@@ -1,6 +1,8 @@
 package com.zoecarl.common;
 
-public class ClientKVResp {
+import java.io.Serializable;
+
+public class ClientKVResp implements Serializable {
     private String key;
     private String value;
 

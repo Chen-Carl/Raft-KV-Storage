@@ -21,22 +21,24 @@ import com.zoecarl.raft.raftrpc.service.AppendEntriesService;
 import com.zoecarl.raft.raftrpc.service.ClientKVService;
 import com.zoecarl.common.ClientKVReq;
 import com.zoecarl.common.ClientKVResp;
+import com.zoecarl.common.Peers.Peer;
 import com.zoecarl.common.ClientKVReq.Type;
 import com.zoecarl.raft.Raft;
 
 public class RaftRpcClient extends RpcClient {
     private static final Logger logger = LogManager.getLogger(RaftRpcClient.class);
 
-    private HashMap<String, Integer> serverList;    // used only for users
-    
+    private HashMap<Integer, String> serverList; // used only for users
+
     public void initKVService(String filename) {
         serverList = new HashMap<>();
         String settings = FileOp.readFile(filename);
         String[] lines = settings.split("\n");
         for (String line : lines) {
             String[] tokens = line.split(" ");
-            serverList.put(tokens[0], Integer.parseInt(tokens[1]));
+            serverList.put(Integer.parseInt(tokens[1]), tokens[0]);
         }
+        System.out.println(serverList);
     }
 
     // Respond to RPCs from candidates and leaders
@@ -47,7 +49,7 @@ public class RaftRpcClient extends RpcClient {
     public RaftRpcClient(String host, int port, boolean user) {
         super(host, port);
         if (user) {
-            initKVService("settings.txt");
+            initKVService("./src/test/java/com/zoecarl/cluster/settings.txt");
         }
     }
 
@@ -56,7 +58,7 @@ public class RaftRpcClient extends RpcClient {
         Class<SayHelloService> serviceClass = SayHelloService.class;
         try {
             Method method = serviceClass.getMethod("sayHello", String.class, Raft.class);
-            Object[] args = {msg};
+            Object[] args = { msg };
             Object obj = callRemoteProcedure(method, args, 1000, 1);
             return (String) obj;
         } catch (Exception e) {
@@ -134,15 +136,36 @@ public class RaftRpcClient extends RpcClient {
 
     // usr rpc
     public boolean put(String key, String value) {
-        HashMap.Entry<?, ?> entry = serverList.entrySet().iterator().next();
-        String host = (String) entry.getKey();
-        int port = (int) entry.getValue();
+        // HashMap.Entry<?, ?> entry = serverList.entrySet().iterator().next();
+        String host = "127.0.0.1";
+        int port = 13382;
+        System.out.println(host + ":" + port);
         resetAddr(host, port);
         ClientKVReq req = new ClientKVReq(key, value, Type.PUT);
         Class<ClientKVService> serviceClass = ClientKVService.class;
         try {
             Method method = serviceClass.getMethod("handleClientKVReq", ClientKVReq.class, Raft.class);
             Object[] arguments = { req };
+            logger.info("{} send a put request to {}", getSelfAddr(), host + ":" + port);
+            ClientKVResp success = (ClientKVResp) callRemoteProcedure(method, arguments, 1000, 1);
+            return (success.getValue().equals("true") ? true : false);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    public boolean putLeader(String key, String value, String leader) {
+        String[] addr = leader.split(":");
+        String host = addr[0];
+        int port = Integer.parseInt(addr[1]);
+        resetAddr(host, port);
+        ClientKVReq req = new ClientKVReq(key, value, Type.PUT);
+        Class<ClientKVService> serviceClass = ClientKVService.class;
+        try {
+            Method method = serviceClass.getMethod("handleClientKVReq", ClientKVReq.class, Raft.class);
+            Object[] arguments = { req };
+            logger.info("{} send a put request to {}", getSelfAddr(), host + ":" + port);
             ClientKVResp success = (ClientKVResp) callRemoteProcedure(method, arguments, 1000, 1);
             return (success.getValue() == "true" ? true : false);
         } catch (Exception e) {
@@ -153,8 +176,8 @@ public class RaftRpcClient extends RpcClient {
 
     public String get(String key) {
         HashMap.Entry<?, ?> entry = serverList.entrySet().iterator().next();
-        String host = (String) entry.getKey();
-        int port = (int) entry.getValue();
+        String host = (String) entry.getValue();
+        int port = (int) entry.getKey();
         resetAddr(host, port);
         ClientKVReq req = new ClientKVReq(key, null, Type.GET);
         Class<ClientKVService> serviceClass = ClientKVService.class;

@@ -10,6 +10,7 @@ import com.zoecarl.raft.raftrpc.service.AddPeerService;
 import com.zoecarl.raft.raftrpc.service.AppendEntriesService;
 import com.zoecarl.raft.raftrpc.service.ReqVoteService;
 import com.zoecarl.raft.raftrpc.service.SayHelloService;
+import com.zoecarl.raft.raftrpc.service.ClientKVService;
 import com.zoecarl.rpc.RpcServer;
 
 public class RaftRpcServer extends RpcServer implements Runnable {
@@ -23,6 +24,7 @@ public class RaftRpcServer extends RpcServer implements Runnable {
         super.register(AppendEntriesService.class);
         super.register(AddPeerService.class);
         super.register(SayHelloService.class);
+        super.register(ClientKVService.class);
     }
 
     @Override
