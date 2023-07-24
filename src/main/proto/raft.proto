@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package raftrpc;
+
+option java_package = "protobuf";
+option java_outer_classname = "RaftRPCProto";
+
+service RaftRPC {
+    rpc RequestVote (RequestVoteRequest) returns (RequestVoteResponse);
+    rpc AppendEntries (AppendEntriesRequest) returns (AppendEntriesResponse);
+    // rpc InstallSnapshot (InstallSnapshotRequest) returns (InstallSnapshotResponse) {}
+}
+
+message RequestVoteRequest {
+    int32 term = 1;
+    int32 candidateId = 2;
+    int32 lastLogIndex = 3;
+    int32 lastLogTerm = 4;
+}
+
+message RequestVoteResponse {
+    int32 term = 1;
+    bool voteGranted = 2;
+}
+
+message AppendEntriesRequest {
+    int32 term = 1;
+    int32 leaderId = 2;
+    int32 prevLogIndex = 3;
+    int32 prevLogTerm = 4;
+    repeated LogEntry entries = 5;
+    int32 leaderCommit = 6;
+}
+
+message AppendEntriesResponse {
+    int32 term = 1;
+    bool success = 2;
+}
+
+message LogEntry {
+    int32 term = 1;
+    string command = 2;
+}

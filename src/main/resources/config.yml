@@ -1,0 +1,14 @@
+raft:
+  nodes:
+    - id: 0
+      address: localhost
+      port: 5000
+    - id: 1
+      address: localhost
+      port: 5001
+    - id: 2
+      address: localhost
+      port: 5002
+  heartbeat: 5000
+  electionTimeoutMin: 15000
+  electionTimeoutMax: 30000
