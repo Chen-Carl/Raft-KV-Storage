@@ -5,7 +5,6 @@ import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ExecutionException;
@@ -18,8 +17,12 @@ import org.yaml.snakeyaml.Yaml;
 
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
+import com.zoecll.config.PeerInfo;
+import com.zoecll.kvstorage.KvServer;
 
 import io.grpc.stub.StreamObserver;
+import lombok.Getter;
+import lombok.Setter;
 import protobuf.RaftRPCGrpc;
 import protobuf.RaftRPCGrpc.RaftRPCStub;
 import protobuf.RaftRPCProto.AppendEntriesRequest;
@@ -28,7 +31,7 @@ import protobuf.RaftRPCProto.LogEntry;
 import protobuf.RaftRPCProto.RequestVoteRequest;
 import protobuf.RaftRPCProto.RequestVoteResponse;
 
-public class RaftNode extends RaftRPCServer {
+public class RaftNode {
 
     enum RaftState {
         Follower,
@@ -141,19 +144,32 @@ public class RaftNode extends RaftRPCServer {
 
     private static final Logger logger = LoggerFactory.getLogger(RaftNode.class);
 
+    // server components
+    RaftRPCServer raftRPCServer = new RaftRPCServer(this);
+    KvServer kvServer = new KvServer(this);
+
     // common info
+    @Getter
     private int id;
     private int totalVotes = 0;
     private RaftState state;
+    @Getter
     private ArrayList<PeerInfo> peers;
 
     // persistent state on all servers
+    @Getter
     private int currentTerm;
+    @Getter
+    @Setter
     private int votedFor = -1;
+    @Getter
     private ArrayList<LogEntry> logs;
 
     // volatile state on all servers
+    @Getter
+    @Setter
     private int commitIndex;    // index of highest log entry known to be committed
+    @Getter
     private int lastApplied;    // index of highest log entry applied to state machine
 
     // volatile state on leaders
@@ -165,8 +181,8 @@ public class RaftNode extends RaftRPCServer {
     private int electionTimeoutMax = 300;
     private int electionTimeout = 200;
     private int heartbeat = 50;
+    @Setter
     private long lastReceiveAppendEntries = System.currentTimeMillis();
-
 
     public RaftNode(int id, ArrayList<PeerInfo> peers) {
         this.id = id;
@@ -187,14 +203,184 @@ public class RaftNode extends RaftRPCServer {
         try {
             InputStream input = new FileInputStream("src/main/resources/config.yml");
             Map<String, Map<String, Object>> data = yaml.load(input);
-            this.heartbeat = (int) data.get("raft").get("heartbeat");
-            this.electionTimeoutMin = (int) data.get("raft").get("electionTimeoutMin");
-            this.electionTimeoutMax = (int) data.get("raft").get("electionTimeoutMax");
+            Map<String, Integer> timeout = (Map<String, Integer>) data.get("cluster").get("timeout");
+            this.heartbeat = timeout.get("heartbeat");
+            this.electionTimeoutMin = timeout.get("electionTimeoutMin");
+            this.electionTimeoutMax = timeout.get("electionTimeoutMax");
         } catch (FileNotFoundException e) {
             logger.error("Node config file not found.");
             e.printStackTrace();
         }
+    }
 
+    public synchronized void convertToFollower(int term, int votedFor) {
+        if (state != RaftState.Follower) {
+            logger.info("[Raft node {}] Convert {} to follower", state.toString(), id);
+        }
+        currentTerm = term;
+        state = RaftState.Follower;
+        votedFor = -1;
+        totalVotes = 0;
+        persist();
+    }
+
+    private synchronized void convertToLeader() {
+        if (state != RaftState.Leader) {
+            logger.info("[Raft node {}] Convert {} to leader", id, state.toString());
+        }
+        state = RaftState.Leader;
+    }
+
+    private synchronized void convertToCandidate() {
+        if (state != RaftState.Candidate) {
+            logger.info("[Raft node {}] Convert {} to candidate", id, state.toString());
+        }
+        state = RaftState.Candidate;
+        currentTerm++;
+        votedFor = id;
+        totalVotes = 1;
+        electionTimeout = new Random().nextInt(2000) + 3000;
+        persist();
+    }
+
+    public synchronized void persist() {
+
+    }
+
+    public synchronized void applyLogs() {
+        while (lastApplied < commitIndex) {
+            lastApplied++;
+            kvServer.applyLog(logs.get(lastApplied).getCommand());
+        }
+        logger.debug("[Raft node {}] Apply logs to state machine, lastApplied: {}", id, lastApplied);
+    }
+
+    public synchronized boolean appendEntry(String command) {
+        if (state != RaftState.Leader) {
+            return false;
+        }
+        LogEntry.Builder builder = LogEntry.newBuilder();
+        builder.setTerm(currentTerm);
+        builder.setCommand(command);
+        logs.add(builder.build());
+        nextIndex.set(id, logs.size() - 1);
+        matchIndex.set(id, logs.size() - 1);
+        startAppendEntries();
+        return true;
+    }
+
+    private synchronized void startLeaderElection() {
+        logger.info("[Raft node {}] Starting leader election", id);
+
+        convertToCandidate();
+
+        int lastLogIndex = logs.size() - 1;
+        int lastLogTerm = logs.size() > 0 ? logs.get(lastLogIndex).getTerm() : -1;
+
+        RequestVoteRequest.Builder builder = RequestVoteRequest.newBuilder();
+        builder.setTerm(currentTerm);
+        builder.setCandidateId(id);
+        builder.setLastLogIndex(lastLogIndex);
+        builder.setLastLogTerm(lastLogTerm);
+
+        for (int i = 0; i < peers.size(); i++) {
+            if (i == id) {
+                continue;
+            }
+            new ElectionTask(builder.build(), i).start();
+        }
+    }
+
+    private synchronized void startAppendEntries() {
+        logger.info("[Raft node {}] Starting appendEntries, current term: {}, log size: {}, commit index: {}", id, currentTerm, logs.size(), commitIndex);
+
+        for (int i = 0; i < peers.size(); i++) {
+            if (i == id) {
+                continue;
+            }
+
+            AppendEntriesRequest.Builder builder = AppendEntriesRequest.newBuilder();
+            builder.setTerm(currentTerm);
+            builder.setLeaderId(id);
+            builder.setPrevLogIndex(nextIndex.get(i) - 1);
+            if (nextIndex.get(i) != 0) {
+                builder.setPrevLogTerm(logs.get(nextIndex.get(i) - 1).getTerm());
+            } else {
+                builder.setPrevLogTerm(-1);
+            }
+            builder.addAllEntries(logs.subList(nextIndex.get(i), logs.size()));
+            builder.setLeaderCommit(commitIndex);
+            new AppendEntriesTask(builder.build(), i).start();
+        }
+    }
+
+    private ListenableFuture<RequestVoteResponse> sendRequestVote(RequestVoteRequest request, int node) {
+        logger.debug("[Raft node {}] Send requestVote request to node {}", id, node);
+
+        final RaftRPCStub asyncClient = RaftRPCGrpc.newStub(peers.get(node).getRpcChannel());
+        SettableFuture<RequestVoteResponse> futureResponse = SettableFuture.create();
+        asyncClient.requestVote(request, new StreamObserver<RequestVoteResponse>() {
+            @Override
+            public void onNext(RequestVoteResponse response) {
+                futureResponse.set(response);
+            }
+
+            @Override
+            public void onError(Throwable t) {
+                logger.warn("[Raft node {}] Failed to sending requestVote request to node {}", id, node);
+                futureResponse.setException(t);
+            }
+
+            @Override
+            public void onCompleted() {
+
+            }
+        });
+        return futureResponse;
+    }
+
+    private ListenableFuture<AppendEntriesResponse> sendAppendEntries(AppendEntriesRequest request, int node) {
+        logger.debug("[Raft node {}] Send appendEntries request to node {}", id, node);
+
+        final RaftRPCStub asyncClient = RaftRPCGrpc.newStub(peers.get(node).getRpcChannel());
+        SettableFuture<AppendEntriesResponse> futureResponse = SettableFuture.create();
+        asyncClient.appendEntries(request, new StreamObserver<AppendEntriesResponse>() {
+            @Override
+            public void onNext(AppendEntriesResponse response) {
+                futureResponse.set(response);
+            }
+
+            @Override
+            public void onError(Throwable t) {
+                logger.warn("[Raft node {}] Failed to sending appendEntries request to node {}", id, node);
+                futureResponse.setException(t);
+            }
+
+            @Override
+            public void onCompleted() {
+
+            }
+        });
+
+        return futureResponse;
+    }
+
+    public void setRandomElectionTimeout() {
+        electionTimeout = electionTimeoutMin + new Random().nextInt(electionTimeoutMax - electionTimeoutMin);
+    }
+
+    public void start() {
+        // start rpc server
+        new Thread(() -> {
+            raftRPCServer.start();
+        }).start();
+
+        // start kvstorage server
+        new Thread(() -> {
+            kvServer.start();
+        }).start();
+
+        // start raft server
         new Thread(() -> {
             while (true) {
                 try {
@@ -237,291 +423,5 @@ public class RaftNode extends RaftRPCServer {
                 }
             }
         }).start();
-
-    }
-
-    @Override
-    public synchronized void appendEntries(AppendEntriesRequest request, StreamObserver<AppendEntriesResponse> responseObserver) {
-        logger.debug("[Raft node {}] Received appendEntries request from {}", id, request.getLeaderId());
-
-        AppendEntriesResponse.Builder builder = AppendEntriesResponse.newBuilder();
-
-        if (request.getTerm() < currentTerm) {
-            builder.setTerm(currentTerm);
-            builder.setSuccess(false);
-            responseObserver.onNext(builder.build());
-            responseObserver.onCompleted();
-            return;
-        }
-        
-        electionTimeout = electionTimeoutMin + new Random().nextInt(electionTimeoutMax - electionTimeoutMin);
-        convertToFollower(request.getTerm(), request.getLeaderId());
-        lastReceiveAppendEntries = System.currentTimeMillis();
-        
-        if (request.getPrevLogIndex() == -1) {
-            builder.setTerm(currentTerm);
-            builder.setSuccess(true);
-            responseObserver.onNext(builder.build());
-            responseObserver.onCompleted();
-            logs.clear();
-            logs.addAll(request.getEntriesList());
-            if (request.getLeaderCommit() > commitIndex) {
-                commitIndex = Math.min(request.getLeaderCommit(), logs.size() - 1);
-            }
-            persist();
-            applyLogs();
-            return;
-        }
-
-        if (request.getPrevLogIndex() > logs.size() - 1) {
-            builder.setTerm(currentTerm);
-            builder.setSuccess(false);
-            responseObserver.onNext(builder.build());
-            responseObserver.onCompleted();
-            return;
-        }
-
-        // if (request.getPrevLogIndex() <= logs.size() - 1)
-        if (request.getPrevLogTerm() != logs.get(request.getPrevLogIndex()).getTerm()) {
-            builder.setTerm(currentTerm);
-            builder.setSuccess(false);
-            responseObserver.onNext(builder.build());
-            responseObserver.onCompleted();
-            return;
-        }
-
-        // if index and term are all correct, the log entry is correct
-        builder.setTerm(currentTerm);
-        builder.setSuccess(true);
-        responseObserver.onNext(builder.build());
-        responseObserver.onCompleted();
-        List<LogEntry> overdue = logs.subList(request.getPrevLogIndex() + 1, logs.size());
-        logs.removeAll(overdue);
-        logs.addAll(request.getEntriesList());
-        if (request.getLeaderCommit() > commitIndex) {
-            commitIndex = Math.min(request.getLeaderCommit(), logs.size() - 1);
-        }
-        persist();
-        applyLogs();
-    }
-
-    @Override
-    public synchronized void requestVote(RequestVoteRequest request, StreamObserver<RequestVoteResponse> responseObserver) {
-        logger.debug("[Raft node {}] Received requestVote request from candidate {}", id, request.getCandidateId());
-
-        RequestVoteResponse.Builder builder = RequestVoteResponse.newBuilder();
-
-        if (request.getTerm() < currentTerm) {
-            builder.setVoteGranted(false);
-            builder.setTerm(currentTerm);
-            responseObserver.onNext(builder.build());
-            responseObserver.onCompleted();
-            return;
-        }
-
-        if (request.getTerm() == currentTerm) {
-            if (votedFor != -1 && votedFor != request.getCandidateId()) {
-                builder.setVoteGranted(false);
-                builder.setTerm(currentTerm);
-                responseObserver.onNext(builder.build());
-                responseObserver.onCompleted();
-                return;
-            }
-
-            int lastLogIndex = logs.size() - 1;
-            int lastLogTerm = logs.size() > 0 ? logs.get(lastLogIndex).getTerm() : -1;
-            if (request.getLastLogTerm() < lastLogTerm) {
-                builder.setVoteGranted(false);
-                builder.setTerm(currentTerm);
-                responseObserver.onNext(builder.build());
-                responseObserver.onCompleted();
-                return;
-            }
-
-            if (request.getLastLogTerm() == lastLogTerm && request.getLastLogIndex() < lastLogIndex) {
-                builder.setVoteGranted(false);
-                builder.setTerm(currentTerm);
-                responseObserver.onNext(builder.build());
-                responseObserver.onCompleted();
-                return;
-            }
-
-            // if (request.getLastLogTerm() > lastLogTerm)
-            builder.setVoteGranted(true);
-            builder.setTerm(currentTerm);
-            responseObserver.onNext(builder.build());
-            responseObserver.onCompleted();
-            votedFor = request.getCandidateId();
-            persist();
-            logger.debug("[Raft node {}] Voted for candidate {}", id, request.getCandidateId());
-            return;
-        }
-
-        // if (request.getTerm() > currentTerm)
-        logger.info("[Raft node {}] Received requestVote request from candidate {} with higher term {} > {}", id, request.getCandidateId(), request.getTerm(), currentTerm);
-        convertToFollower(request.getTerm(), -1);   // update currentTerm, state, votedFor, etc.
-        int lastLogIndex = logs.size() - 1;
-        int lastLogTerm = logs.size() > 0 ? logs.get(lastLogIndex).getTerm() : -1;
-        if (request.getLastLogTerm() < lastLogTerm) {
-            builder.setVoteGranted(false);
-            builder.setTerm(currentTerm);
-            responseObserver.onNext(builder.build());
-            responseObserver.onCompleted();
-            return;
-        }
-
-        if (request.getLastLogTerm() == lastLogTerm && request.getLastLogIndex() < lastLogIndex) {
-            builder.setVoteGranted(false);
-            builder.setTerm(currentTerm);
-            responseObserver.onNext(builder.build());
-            responseObserver.onCompleted();
-            return;
-        }
-
-        // if (request.getLastLogTerm() > lastLogTerm)
-        builder.setVoteGranted(true);
-        builder.setTerm(currentTerm);
-        responseObserver.onNext(builder.build());
-        responseObserver.onCompleted();
-        votedFor = request.getCandidateId();
-        persist();
-        logger.debug("[Raft node {}] Voted for candidate {}", id, request.getCandidateId());
-    }
-    
-    private synchronized void convertToFollower(int term, int votedFor) {
-        if (state != RaftState.Follower) {
-            logger.info("[Raft node {}] Convert {} to follower", state.toString(), id);
-        }
-        currentTerm = term;
-        state = RaftState.Follower;
-        votedFor = -1;
-        totalVotes = 0;
-        persist();
-    }
-
-    private synchronized void convertToLeader() {
-        if (state != RaftState.Leader) {
-            logger.info("[Raft node {}] Convert {} to leader", state.toString(), id);
-        }
-        state = RaftState.Leader;
-    }
-
-    private synchronized void convertToCandidate() {
-        if (state != RaftState.Candidate) {
-            logger.info("[Raft node {}] Convert {} to candidate", state.toString(), id);
-        }
-        state = RaftState.Candidate;
-        currentTerm++;
-        votedFor = id;
-        totalVotes = 1;
-        electionTimeout = new Random().nextInt(2000) + 3000;
-        persist();
-    }
-
-    private synchronized void persist() {
-
-    }
-
-    private synchronized void applyLogs() {
-        while (lastApplied < commitIndex) {
-            lastApplied++;
-            // TODO: apply
-        }
-    }
-
-    private synchronized void startLeaderElection() {
-        logger.info("[Raft node {}] Starting leader election", id);
-
-        convertToCandidate();
-
-        int lastLogIndex = logs.size() - 1;
-        int lastLogTerm = logs.size() > 0 ? logs.get(lastLogIndex).getTerm() : -1;
-
-        RequestVoteRequest.Builder builder = RequestVoteRequest.newBuilder();
-        builder.setTerm(currentTerm);
-        builder.setCandidateId(id);
-        builder.setLastLogIndex(lastLogIndex);
-        builder.setLastLogTerm(lastLogTerm);
-
-        for (int i = 0; i < peers.size(); i++) {
-            if (i == id) {
-                continue;
-            }
-            new ElectionTask(builder.build(), i).start();
-        }
-    }
-
-    private synchronized void startAppendEntries() {
-        logger.info("[Raft node {}] Starting appendEntries", id);
-
-        for (int i = 0; i < peers.size(); i++) {
-            if (i == id) {
-                continue;
-            }
-
-            AppendEntriesRequest.Builder builder = AppendEntriesRequest.newBuilder();
-            builder.setTerm(currentTerm);
-            builder.setLeaderId(id);
-            builder.setPrevLogIndex(nextIndex.get(i) - 1);
-            if (nextIndex.get(i) != 0) {
-                builder.setPrevLogTerm(logs.get(nextIndex.get(i)).getTerm());
-            } else {
-                builder.setPrevLogTerm(-1);
-            }
-            builder.addAllEntries(logs.subList(nextIndex.get(i), logs.size()));
-            builder.setLeaderCommit(commitIndex);
-            new AppendEntriesTask(builder.build(), i).start();
-        }
-    }
-
-    private ListenableFuture<RequestVoteResponse> sendRequestVote(RequestVoteRequest request, int node) {
-        logger.debug("[Raft node {}] Send requestVote request to node {}", id, node);
-
-        final RaftRPCStub asyncClient = RaftRPCGrpc.newStub(peers.get(node).getChannel());
-        SettableFuture<RequestVoteResponse> futureResponse = SettableFuture.create();
-        asyncClient.requestVote(request, new StreamObserver<RequestVoteResponse>() {
-            @Override
-            public void onNext(RequestVoteResponse response) {
-                futureResponse.set(response);
-            }
-
-            @Override
-            public void onError(Throwable t) {
-                logger.warn("[Raft node {}] Failed to sending requestVote request to node {}", id, node);
-                futureResponse.setException(t);
-            }
-
-            @Override
-            public void onCompleted() {
-
-            }
-        });
-        return futureResponse;
-    }
-
-    private ListenableFuture<AppendEntriesResponse> sendAppendEntries(AppendEntriesRequest request, int node) {
-        logger.debug("[Raft node {}] Send appendEntries request to node {}", id, node);
-
-        final RaftRPCStub asyncClient = RaftRPCGrpc.newStub(peers.get(node).getChannel());
-        SettableFuture<AppendEntriesResponse> futureResponse = SettableFuture.create();
-        asyncClient.appendEntries(request, new StreamObserver<AppendEntriesResponse>() {
-            @Override
-            public void onNext(AppendEntriesResponse response) {
-                futureResponse.set(response);
-            }
-
-            @Override
-            public void onError(Throwable t) {
-                logger.warn("[Raft node {}] Failed to sending appendEntries request to node {}", id, node);
-                futureResponse.setException(t);
-            }
-
-            @Override
-            public void onCompleted() {
-
-            }
-        });
-
-        return futureResponse;
     }
 }

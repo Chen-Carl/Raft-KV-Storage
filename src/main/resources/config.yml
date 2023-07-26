@@ -1,14 +1,19 @@
-raft:
+cluster:
   nodes:
     - id: 0
       address: localhost
-      port: 5000
+      rpcPort: 5000
+      kvPort: 5001
     - id: 1
       address: localhost
-      port: 5001
+      rpcPort: 5002
+      kvPort: 5003
     - id: 2
       address: localhost
-      port: 5002
-  heartbeat: 5000
-  electionTimeoutMin: 15000
-  electionTimeoutMax: 30000
+      rpcPort: 5004
+      kvPort: 5005
+  
+  timeout:
+    heartbeat: 5000
+    electionTimeoutMin: 15000
+    electionTimeoutMax: 30000

@@ -7,7 +7,7 @@
             </pattern>
         </encoder>
     </appender>
-    <logger name="com.zoecll" level="debug" additivity="false">
+    <logger name="com.zoecll" level="info" additivity="false">
         <appender-ref ref="Console"/>
     </logger>
     <root level="info">

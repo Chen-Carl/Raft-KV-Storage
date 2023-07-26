@@ -1,18 +1,18 @@
-package com.zoecll;
+package com.zoecll.raftrpc;
 
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
 
+import org.junit.Test;
+
 import com.zoecll.config.PeerInfo;
-import com.zoecll.raftrpc.RaftNode;
 
-public class App 
-{
-    public static void main(String[] args) {
-        start();
-    }
+public class ElectionTask {
 
-    public static void start() {
+    // private final static Logger logger = LoggerFactory.getLogger(ElectionTask.class);
+    
+    @Test
+    public void testElectionTask() {
         try {
             ArrayList<PeerInfo> peerInfos = PeerInfo.loadConfig();
             for (int i = 0; i < peerInfos.size(); i++) {
