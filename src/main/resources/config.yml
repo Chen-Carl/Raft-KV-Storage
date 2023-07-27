@@ -17,3 +17,5 @@ cluster:
     heartbeat: 5000
     electionTimeoutMin: 15000
     electionTimeoutMax: 30000
+  
+  maxLogSize: 1

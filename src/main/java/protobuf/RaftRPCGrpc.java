@@ -77,6 +77,37 @@ public final class RaftRPCGrpc {
     return getAppendEntriesMethod;
   }
 
+  private static volatile io.grpc.MethodDescriptor<protobuf.RaftRPCProto.InstallSnapshotRequest,
+      protobuf.RaftRPCProto.InstallSnapshotResponse> getInstallSnapshotMethod;
+
+  @io.grpc.stub.annotations.RpcMethod(
+      fullMethodName = SERVICE_NAME + '/' + "InstallSnapshot",
+      requestType = protobuf.RaftRPCProto.InstallSnapshotRequest.class,
+      responseType = protobuf.RaftRPCProto.InstallSnapshotResponse.class,
+      methodType = io.grpc.MethodDescriptor.MethodType.UNARY)
+  public static io.grpc.MethodDescriptor<protobuf.RaftRPCProto.InstallSnapshotRequest,
+      protobuf.RaftRPCProto.InstallSnapshotResponse> getInstallSnapshotMethod() {
+    io.grpc.MethodDescriptor<protobuf.RaftRPCProto.InstallSnapshotRequest, protobuf.RaftRPCProto.InstallSnapshotResponse> getInstallSnapshotMethod;
+    if ((getInstallSnapshotMethod = RaftRPCGrpc.getInstallSnapshotMethod) == null) {
+      synchronized (RaftRPCGrpc.class) {
+        if ((getInstallSnapshotMethod = RaftRPCGrpc.getInstallSnapshotMethod) == null) {
+          RaftRPCGrpc.getInstallSnapshotMethod = getInstallSnapshotMethod =
+              io.grpc.MethodDescriptor.<protobuf.RaftRPCProto.InstallSnapshotRequest, protobuf.RaftRPCProto.InstallSnapshotResponse>newBuilder()
+              .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "InstallSnapshot"))
+              .setSampledToLocalTracing(true)
+              .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
+                  protobuf.RaftRPCProto.InstallSnapshotRequest.getDefaultInstance()))
+              .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
+                  protobuf.RaftRPCProto.InstallSnapshotResponse.getDefaultInstance()))
+              .setSchemaDescriptor(new RaftRPCMethodDescriptorSupplier("InstallSnapshot"))
+              .build();
+        }
+      }
+    }
+    return getInstallSnapshotMethod;
+  }
+
   /**
    * Creates a new async stub that supports all call types for the service
    */
@@ -133,13 +164,17 @@ public final class RaftRPCGrpc {
     }
 
     /**
-     * <pre>
-     * rpc InstallSnapshot (InstallSnapshotRequest) returns (InstallSnapshotResponse) {}
-     * </pre>
      */
     default void appendEntries(protobuf.RaftRPCProto.AppendEntriesRequest request,
         io.grpc.stub.StreamObserver<protobuf.RaftRPCProto.AppendEntriesResponse> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getAppendEntriesMethod(), responseObserver);
+    }
+
+    /**
+     */
+    default void installSnapshot(protobuf.RaftRPCProto.InstallSnapshotRequest request,
+        io.grpc.stub.StreamObserver<protobuf.RaftRPCProto.InstallSnapshotResponse> responseObserver) {
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getInstallSnapshotMethod(), responseObserver);
     }
   }
 
@@ -179,14 +214,19 @@ public final class RaftRPCGrpc {
     }
 
     /**
-     * <pre>
-     * rpc InstallSnapshot (InstallSnapshotRequest) returns (InstallSnapshotResponse) {}
-     * </pre>
      */
     public void appendEntries(protobuf.RaftRPCProto.AppendEntriesRequest request,
         io.grpc.stub.StreamObserver<protobuf.RaftRPCProto.AppendEntriesResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
           getChannel().newCall(getAppendEntriesMethod(), getCallOptions()), request, responseObserver);
+    }
+
+    /**
+     */
+    public void installSnapshot(protobuf.RaftRPCProto.InstallSnapshotRequest request,
+        io.grpc.stub.StreamObserver<protobuf.RaftRPCProto.InstallSnapshotResponse> responseObserver) {
+      io.grpc.stub.ClientCalls.asyncUnaryCall(
+          getChannel().newCall(getInstallSnapshotMethod(), getCallOptions()), request, responseObserver);
     }
   }
 
@@ -214,13 +254,17 @@ public final class RaftRPCGrpc {
     }
 
     /**
-     * <pre>
-     * rpc InstallSnapshot (InstallSnapshotRequest) returns (InstallSnapshotResponse) {}
-     * </pre>
      */
     public protobuf.RaftRPCProto.AppendEntriesResponse appendEntries(protobuf.RaftRPCProto.AppendEntriesRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getAppendEntriesMethod(), getCallOptions(), request);
+    }
+
+    /**
+     */
+    public protobuf.RaftRPCProto.InstallSnapshotResponse installSnapshot(protobuf.RaftRPCProto.InstallSnapshotRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getInstallSnapshotMethod(), getCallOptions(), request);
     }
   }
 
@@ -249,19 +293,25 @@ public final class RaftRPCGrpc {
     }
 
     /**
-     * <pre>
-     * rpc InstallSnapshot (InstallSnapshotRequest) returns (InstallSnapshotResponse) {}
-     * </pre>
      */
     public com.google.common.util.concurrent.ListenableFuture<protobuf.RaftRPCProto.AppendEntriesResponse> appendEntries(
         protobuf.RaftRPCProto.AppendEntriesRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(
           getChannel().newCall(getAppendEntriesMethod(), getCallOptions()), request);
     }
+
+    /**
+     */
+    public com.google.common.util.concurrent.ListenableFuture<protobuf.RaftRPCProto.InstallSnapshotResponse> installSnapshot(
+        protobuf.RaftRPCProto.InstallSnapshotRequest request) {
+      return io.grpc.stub.ClientCalls.futureUnaryCall(
+          getChannel().newCall(getInstallSnapshotMethod(), getCallOptions()), request);
+    }
   }
 
   private static final int METHODID_REQUEST_VOTE = 0;
   private static final int METHODID_APPEND_ENTRIES = 1;
+  private static final int METHODID_INSTALL_SNAPSHOT = 2;
 
   private static final class MethodHandlers<Req, Resp> implements
       io.grpc.stub.ServerCalls.UnaryMethod<Req, Resp>,
@@ -287,6 +337,10 @@ public final class RaftRPCGrpc {
         case METHODID_APPEND_ENTRIES:
           serviceImpl.appendEntries((protobuf.RaftRPCProto.AppendEntriesRequest) request,
               (io.grpc.stub.StreamObserver<protobuf.RaftRPCProto.AppendEntriesResponse>) responseObserver);
+          break;
+        case METHODID_INSTALL_SNAPSHOT:
+          serviceImpl.installSnapshot((protobuf.RaftRPCProto.InstallSnapshotRequest) request,
+              (io.grpc.stub.StreamObserver<protobuf.RaftRPCProto.InstallSnapshotResponse>) responseObserver);
           break;
         default:
           throw new AssertionError();
@@ -320,6 +374,13 @@ public final class RaftRPCGrpc {
               protobuf.RaftRPCProto.AppendEntriesRequest,
               protobuf.RaftRPCProto.AppendEntriesResponse>(
                 service, METHODID_APPEND_ENTRIES)))
+        .addMethod(
+          getInstallSnapshotMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              protobuf.RaftRPCProto.InstallSnapshotRequest,
+              protobuf.RaftRPCProto.InstallSnapshotResponse>(
+                service, METHODID_INSTALL_SNAPSHOT)))
         .build();
   }
 
@@ -370,6 +431,7 @@ public final class RaftRPCGrpc {
               .setSchemaDescriptor(new RaftRPCFileDescriptorSupplier())
               .addMethod(getRequestVoteMethod())
               .addMethod(getAppendEntriesMethod())
+              .addMethod(getInstallSnapshotMethod())
               .build();
         }
       }

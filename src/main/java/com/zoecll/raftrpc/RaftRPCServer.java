@@ -1,6 +1,6 @@
 package com.zoecll.raftrpc;
 
-import java.util.List;
+import java.util.concurrent.locks.ReentrantLock;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -8,10 +8,12 @@ import org.slf4j.LoggerFactory;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.stub.StreamObserver;
+import lombok.Synchronized;
 import protobuf.RaftRPCGrpc.RaftRPCImplBase;
 import protobuf.RaftRPCProto.AppendEntriesRequest;
 import protobuf.RaftRPCProto.AppendEntriesResponse;
-import protobuf.RaftRPCProto.LogEntry;
+import protobuf.RaftRPCProto.InstallSnapshotRequest;
+import protobuf.RaftRPCProto.InstallSnapshotResponse;
 import protobuf.RaftRPCProto.RequestVoteRequest;
 import protobuf.RaftRPCProto.RequestVoteResponse;
 
@@ -26,7 +28,7 @@ public class RaftRPCServer extends RaftRPCImplBase {
     }
 
     @Override
-    public synchronized void appendEntries(AppendEntriesRequest request, StreamObserver<AppendEntriesResponse> responseObserver) {
+    public void appendEntries(AppendEntriesRequest request, StreamObserver<AppendEntriesResponse> responseObserver) {
         logger.debug("[Raft node {}] Received appendEntries request from node {}", raftNode.getId(), request.getLeaderId());
 
         AppendEntriesResponse.Builder builder = AppendEntriesResponse.newBuilder();
@@ -36,6 +38,7 @@ public class RaftRPCServer extends RaftRPCImplBase {
             builder.setSuccess(false);
             responseObserver.onNext(builder.build());
             responseObserver.onCompleted();
+            logger.debug("[Raft node {}] Reject appendEntries request from node {} with lower term {} < current node term {}", raftNode.getId(), request.getLeaderId(), request.getTerm(), raftNode.getCurrentTerm());
             return;
         }
 
@@ -48,30 +51,35 @@ public class RaftRPCServer extends RaftRPCImplBase {
             builder.setSuccess(true);
             responseObserver.onNext(builder.build());
             responseObserver.onCompleted();
-            raftNode.getLogs().clear();
-            raftNode.getLogs().addAll(request.getEntriesList());
+            raftNode.clearLogs();
+            raftNode.addLogs(request.getEntriesList());
             if (request.getLeaderCommit() > raftNode.getCommitIndex()) {
-                raftNode.setCommitIndex(Math.min(request.getLeaderCommit(), raftNode.getLogs().size() - 1));
+                raftNode.setCommitIndex(Math.min(request.getLeaderCommit(), raftNode.getMaxLogIndex()));
             }
-            raftNode.persist();
             raftNode.applyLogs();
             return;
         }
 
-        if (request.getPrevLogIndex() > raftNode.getLogs().size() - 1) {
+        if (request.getPrevLogIndex() > raftNode.getMaxLogIndex()) {
             builder.setTerm(raftNode.getCurrentTerm());
             builder.setSuccess(false);
             responseObserver.onNext(builder.build());
             responseObserver.onCompleted();
+            logger.debug("[Raft node {}] Reject appendEntries request from node {} with prevLogIndex {} > current node log index {}", raftNode.getId(), request.getLeaderId(), request.getPrevLogIndex(), raftNode.getMaxLogIndex());
             return;
         }
 
         // if (request.getPrevLogIndex() <= logs.size() - 1)
-        if (request.getPrevLogTerm() != raftNode.getLogs().get(request.getPrevLogIndex()).getTerm()) {
+        int prevLogTerm = raftNode.getLastIncludedTerm();
+        if (request.getPrevLogIndex() - raftNode.getLastIncludedIndex() - 1 >= 0) {
+            prevLogTerm = raftNode.getLogByIndex(request.getPrevLogIndex()).getTerm();
+        }
+        if (request.getPrevLogTerm() != prevLogTerm) {
             builder.setTerm(raftNode.getCurrentTerm());
             builder.setSuccess(false);
             responseObserver.onNext(builder.build());
             responseObserver.onCompleted();
+            logger.debug("[Raft node {}] Reject appendEntries request from node {} with prevLogTerm {} != current node log term {}", raftNode.getId(), request.getLeaderId(), request.getPrevLogTerm(), raftNode.getLogByIndex(request.getPrevLogIndex()).getTerm());
             return;
         }
 
@@ -80,16 +88,14 @@ public class RaftRPCServer extends RaftRPCImplBase {
         builder.setSuccess(true);
         responseObserver.onNext(builder.build());
         responseObserver.onCompleted();
-        List<LogEntry> overdue = raftNode.getLogs().subList(request.getPrevLogIndex() + 1, raftNode.getLogs().size());
-        raftNode.getLogs().removeAll(overdue);
-        raftNode.getLogs().addAll(request.getEntriesList());
+        raftNode.clearLogs(request.getPrevLogIndex() + 1);
+        raftNode.addLogs(request.getEntriesList());
         if (request.getLeaderCommit() > raftNode.getCommitIndex()) {
-            raftNode.setCommitIndex(Math.min(request.getLeaderCommit(), raftNode.getLogs().size() - 1));
+            raftNode.setCommitIndex(Math.min(request.getLeaderCommit(), raftNode.getMaxLogIndex()));
         }
         if (request.getEntriesList().size() > 0) {
-            logger.info("[Raft node {}] Append {} entries, log size: {}", raftNode.getId(), request.getEntriesList().size(), raftNode.getLogs().size());
+            logger.info("[Raft node {}] Append {} entries, log index: {}, log size: {}", raftNode.getId(), request.getEntriesList().size(), raftNode.getMaxLogIndex(), raftNode.getLogs().size());
         }
-        raftNode.persist();
         raftNode.applyLogs();
     }
 
@@ -116,8 +122,8 @@ public class RaftRPCServer extends RaftRPCImplBase {
                 return;
             }
 
-            int lastLogIndex = raftNode.getLogs().size() - 1;
-            int lastLogTerm = raftNode.getLogs().size() > 0 ? raftNode.getLogs().get(lastLogIndex).getTerm() : -1;
+            int lastLogIndex = raftNode.getMaxLogIndex();
+            int lastLogTerm = raftNode.getLastLogTerm();
             if (request.getLastLogTerm() < lastLogTerm) {
                 builder.setVoteGranted(false);
                 builder.setTerm(raftNode.getCurrentTerm());
@@ -140,7 +146,6 @@ public class RaftRPCServer extends RaftRPCImplBase {
             responseObserver.onNext(builder.build());
             responseObserver.onCompleted();
             raftNode.setVotedFor(request.getCandidateId());
-            raftNode.persist();
             logger.debug("[Raft node {}] Voted for candidate {}", raftNode.getId(), request.getCandidateId());
             return;
         }
@@ -148,8 +153,8 @@ public class RaftRPCServer extends RaftRPCImplBase {
         // if (request.getTerm() > currentTerm)
         logger.info("[Raft node {}] Received requestVote request from candidate {} with higher term {} > {}", raftNode.getId(), request.getCandidateId(), request.getTerm(), raftNode.getCurrentTerm());
         raftNode.convertToFollower(request.getTerm(), -1);   // update currentTerm, state, votedFor, etc.
-        int lastLogIndex = raftNode.getLogs().size() - 1;
-        int lastLogTerm = raftNode.getLogs().size() > 0 ? raftNode.getLogs().get(lastLogIndex).getTerm() : -1;
+        int lastLogIndex = raftNode.getMaxLogIndex();
+        int lastLogTerm = raftNode.getLastLogTerm();
         if (request.getLastLogTerm() < lastLogTerm) {
             builder.setVoteGranted(false);
             builder.setTerm(raftNode.getCurrentTerm());
@@ -172,8 +177,66 @@ public class RaftRPCServer extends RaftRPCImplBase {
         responseObserver.onNext(builder.build());
         responseObserver.onCompleted();
         raftNode.setVotedFor(request.getCandidateId());
-        raftNode.persist();
         logger.debug("[Raft node {}] Voted for candidate {}", raftNode.getId(), request.getCandidateId());
+    }
+
+    @Override
+    public void installSnapshot(InstallSnapshotRequest request, StreamObserver<InstallSnapshotResponse> responseObserver) {
+        InstallSnapshotResponse.Builder builder = InstallSnapshotResponse.newBuilder();
+        builder.setTerm(raftNode.getCurrentTerm());
+        
+        // 1. Reply immediately if term < currentTerm
+        if (request.getTerm() < raftNode.getCurrentTerm()) {
+            responseObserver.onNext(builder.build());
+            responseObserver.onCompleted();
+            return;
+        }
+        
+        if (request.getLastIncludedIndex() <= raftNode.getLastIncludedIndex()) {
+            responseObserver.onNext(builder.build());
+            responseObserver.onCompleted();
+            return;
+        }
+        
+        // 2. Create new snapshot file if first chunk (offset is 0)
+        if (request.getOffset() == 0) {
+            raftNode.getPersister().createSnapshot(1024);
+        }
+
+        // 3. Write data into snapshot file at given offset
+        raftNode.getPersister().write(request.getData().toByteArray(), request.getOffset());
+        
+        // 4. Reply and wait for more data chunks if done is false
+        if (!request.getDone()) {
+            responseObserver.onNext(builder.build());
+            responseObserver.onCompleted();
+            return;
+        }
+
+        // 5. Save snapshot file, discard any existing or partial snapshot with a smaller index
+        raftNode.getPersister().setLastIncludedIndex(request.getLastIncludedIndex());
+        raftNode.getPersister().setLastIncludedTerm(request.getLastIncludedTerm());
+        raftNode.setLastIncludedIndex(request.getLastIncludedIndex());
+        raftNode.setLastIncludedTerm(request.getLastIncludedTerm());
+        raftNode.setLastApplied(request.getLastIncludedIndex());
+        raftNode.getPersister().saveSnapshot();
+
+        // 6. If existing log entry has same index and term as snapshot’s last included entry, retain log entries following it and reply
+        int requestLastIncludedTerm = request.getLastIncludedTerm();
+        int localLastIncludedTerm = raftNode.getLastIncludedTerm();
+        
+        if (request.getLastIncludedIndex() < raftNode.getMaxLogIndex() && requestLastIncludedTerm == localLastIncludedTerm) {
+            raftNode.clearLogs(request.getLastIncludedIndex() + 1, request.getLastIncludedIndex() + 1);
+            responseObserver.onNext(builder.build());
+            responseObserver.onCompleted();
+            return;
+        }
+        
+        // 7. Discard the entire log
+        raftNode.clearLogs();
+
+        // 8. Reset state machine using snapshot contents (and load snapshot’s cluster configuration)
+        raftNode.getKvServer().reset(raftNode.getPersister());
     }
 
     void start() {

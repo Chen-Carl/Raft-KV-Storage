@@ -60,7 +60,7 @@ public class KvClient {
 
     public boolean setNoRetry(String key, String value) {
         SetRequest request = SetRequest.newBuilder().setKey(key).setValue(value).build();
-        final KvStorageStub asyncClient = KvStorageGrpc.newStub(peers.get(0).getKvChannel());
+        final KvStorageStub asyncClient = KvStorageGrpc.newStub(peers.get(1).getKvChannel());
         SettableFuture<SetResponse> responseFuture = SettableFuture.create();
         asyncClient.set(request, new StreamObserver<SetResponse>() {
             @Override

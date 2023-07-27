@@ -3,7 +3,9 @@ package com.zoecll.kvstorage;
 import java.util.HashMap;
 import java.util.UUID;
 import java.util.AbstractMap.SimpleEntry;
+import java.util.ArrayList;
 import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.slf4j.Logger;
@@ -11,11 +13,13 @@ import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.zoecll.persistence.FilePersister;
 import com.zoecll.raftrpc.RaftNode;
 
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.stub.StreamObserver;
+import lombok.Synchronized;
 import protobuf.KvStorageGrpc.KvStorageImplBase;
 import protobuf.KvStorageProto.GetRequest;
 import protobuf.KvStorageProto.GetResponse;
@@ -28,7 +32,7 @@ public class KvServer extends KvStorageImplBase {
 
     private RaftNode raftNode;
     private HashMap<String, SimpleEntry<String, String>> data = new HashMap<>();
-    private ReadWriteLock mutex = new ReentrantReadWriteLock();
+    private ReentrantLock mutex = new ReentrantLock();
 
     public KvServer(RaftNode raftNode) {
         this.raftNode = raftNode;
@@ -40,9 +44,9 @@ public class KvServer extends KvStorageImplBase {
         GetResponse.Builder builder = GetResponse.newBuilder();
 
         String key = request.getKey();
-        mutex.readLock().lock();
+        mutex.lock();
         String value = data.get(key).getKey();
-        mutex.readLock().unlock();
+        mutex.unlock();
 
         if (value == null) {
             responseObserver.onNext(builder.setOk(false).build());
@@ -79,15 +83,15 @@ public class KvServer extends KvStorageImplBase {
             responseObserver.onCompleted();
         }
 
-        mutex.readLock().lock();
+        mutex.lock();
         SimpleEntry<String, String> res = data.get(key);
-        mutex.readLock().unlock();
+        mutex.unlock();
         while (res == null || !res.getValue().equals(uuid)) {
             try {
                 Thread.sleep(500);
-                mutex.readLock().lock();
+                mutex.lock();
                 res = data.get(key);
-                mutex.readLock().unlock();
+                mutex.unlock();
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -107,18 +111,27 @@ public class KvServer extends KvStorageImplBase {
         }
     }
 
+    @Synchronized("mutex")
     public void applyLog(String command) {
         try {
             KvCommand kvCommand = new ObjectMapper().readValue(command, KvCommand.class);
             if (kvCommand.getType() == KvCommand.Type.SET) {
-                mutex.writeLock().lock();
                 data.put(kvCommand.getKey(), new SimpleEntry<>(kvCommand.getValue(), kvCommand.getUuid()));
-                mutex.writeLock().unlock();
             }
-            logger.info("[Raft node {}] Applied log: {}", raftNode.getId(), command);
+            logger.debug("[Raft node {}] Applied log: {}", raftNode.getId(), command);
         } catch (JsonProcessingException e) {
             logger.warn("Failed to deserialize command: {}", command);
             e.printStackTrace();
+        }
+    }
+
+    @Synchronized("mutex")
+    public void reset(FilePersister persister) {
+        data.clear();
+        persister.readSnapshot();
+        ArrayList<String> commands = persister.getCommands();
+        for (String command : commands) {
+            applyLog(command);
         }
     }
 }

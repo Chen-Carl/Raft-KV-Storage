@@ -10,9 +10,22 @@ A process running Raft Protocol is represented by class `RaftNode`. Raft nodes c
 
 ![RaftNode and RaftRPCServer](images/RaftNode.png)
 
+> TIPS: add ReentrantLock carefully in `RaftNode` and `KvServer`.
+
 ### 1.1 Leader Election
 
 ### 1.2 Log Replication
+
+### 1.3 Log Compression and Snapshot
+
+Each raft node may manage their own snapshot, which is irrelavent and thus is not implemented in the project. We only discuss how the leader sends its snapshot to followers.
+
+Snapshot is managed by `Persister` in each `RaftNode`, and `RaftNode` itself does not known any details about the `Snapshot`.
+
+There is a difference between logic log index and `ArrayList<LogEntry>`'s index. The logic log index is an increasing sequence, which may be inconsist with the array index after installing the snapshot and deleting the overdue log entries.
+
+![Logic index and array list index](images/LogCompression.png)
+
 
 ## 2 Key-Value Storage
 
@@ -20,7 +33,7 @@ A process running Raft Protocol is represented by class `RaftNode`. Raft nodes c
 
 Similar to `RaftRPCServer`, `KvServer` is a service registered to `RaftNode`, which may lead to a circular reference. The reason is when `RaftNode` calls `applyLogs` method, it has to learn how to update the replicated state machine in a specified service. In this case, `RaftNode.applyLogs` will call `KvServer.applyLog`.
 
-![](images/KvServer.png)
+![KvServer Processes SET/GET requests](images/KvServer.png)
 
 ### 2.1 Handle client requests
 

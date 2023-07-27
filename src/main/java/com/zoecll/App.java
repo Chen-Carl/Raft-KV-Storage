@@ -9,10 +9,6 @@ import com.zoecll.raftrpc.RaftNode;
 public class App 
 {
     public static void main(String[] args) {
-        start();
-    }
-
-    public static void start() {
         try {
             ArrayList<PeerInfo> peerInfos = PeerInfo.loadConfig();
             for (int i = 0; i < peerInfos.size(); i++) {
