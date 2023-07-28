@@ -7,7 +7,7 @@ public class FilePersisterTest {
 
     public FilePersisterTest() {
         filePersister = new FilePersister();
-        filePersister.createSnapshot(1024);
+        filePersister.createSnapshot(1024 * 1024);
     }
 
     @Test

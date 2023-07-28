@@ -18,14 +18,29 @@ public class KvClientTest {
     }
 
     @Test
-    public void testGet() {
+    public void testGetNoRetry() {
         String res = kvClient.getNoRetry("test");
         System.out.println(res);
     }
 
     @Test
-    public void testSet() {
+    public void testSetNoRetry() {
         kvClient.setNoRetry("test", "test info");
+    }
+
+    @Test
+    public void testGet() {
+        for (int i = 0; i < 100; i++) {
+            String res = kvClient.get("key-" + i);
+            System.out.println(res);
+        }
+    }
+
+    @Test
+    public void testSet() {
+        for (int i = 0; i < 100; i++) {
+            kvClient.set("key-" + i, "value-" + i);
+        }
     }
 
 }

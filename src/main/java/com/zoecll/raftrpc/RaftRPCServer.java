@@ -1,14 +1,11 @@
 package com.zoecll.raftrpc;
 
-import java.util.concurrent.locks.ReentrantLock;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.stub.StreamObserver;
-import lombok.Synchronized;
 import protobuf.RaftRPCGrpc.RaftRPCImplBase;
 import protobuf.RaftRPCProto.AppendEntriesRequest;
 import protobuf.RaftRPCProto.AppendEntriesResponse;
@@ -200,7 +197,7 @@ public class RaftRPCServer extends RaftRPCImplBase {
         
         // 2. Create new snapshot file if first chunk (offset is 0)
         if (request.getOffset() == 0) {
-            raftNode.getPersister().createSnapshot(1024);
+            raftNode.getPersister().createSnapshot(1024 * 1024);
         }
 
         // 3. Write data into snapshot file at given offset

@@ -18,4 +18,4 @@ cluster:
     electionTimeoutMin: 15000
     electionTimeoutMax: 30000
   
-  maxLogSize: 1
+  maxLogSize: 32

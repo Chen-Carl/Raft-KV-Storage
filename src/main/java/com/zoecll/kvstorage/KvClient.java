@@ -21,9 +21,11 @@ public class KvClient {
     private final static Logger logger = LoggerFactory.getLogger(KvClient.class);
 
     private ArrayList<PeerInfo> peers;
+    private int leaderId;
 
     public KvClient(ArrayList<PeerInfo> peers) {
         this.peers = peers;
+        this.leaderId = 0;
     }
 
     public String getNoRetry(String key) {
@@ -60,7 +62,7 @@ public class KvClient {
 
     public boolean setNoRetry(String key, String value) {
         SetRequest request = SetRequest.newBuilder().setKey(key).setValue(value).build();
-        final KvStorageStub asyncClient = KvStorageGrpc.newStub(peers.get(1).getKvChannel());
+        final KvStorageStub asyncClient = KvStorageGrpc.newStub(peers.get(leaderId).getKvChannel());
         SettableFuture<SetResponse> responseFuture = SettableFuture.create();
         asyncClient.set(request, new StreamObserver<SetResponse>() {
             @Override
@@ -91,12 +93,31 @@ public class KvClient {
     }
     
     public String get(String key) {
-        // TODO: retry
-        return null;
+        while (true) {
+            String res = getNoRetry(key);
+            if (res != null) {
+                return res;
+            }
+            leaderId = (leaderId + 1) % peers.size();
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            logger.info("[KvClient] retry get, key: {}", key);
+        }
     }
 
     public boolean set(String key, String value) {
-        // TODO: retry
+        while (!setNoRetry(key, value)) {
+            leaderId = (leaderId + 1) % peers.size();
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            logger.info("[KvClient] retry set, key: {}, value: {}", key, value);
+        }
         return true;
     }
     

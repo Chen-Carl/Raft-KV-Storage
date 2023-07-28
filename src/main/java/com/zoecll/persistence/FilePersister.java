@@ -20,17 +20,28 @@ public class FilePersister {
 
     private Snapshot snapshot;
     private String filename;
+    private int id;
     private ReadWriteLock mutex = new ReentrantReadWriteLock();
 
     public FilePersister() {
         this.filename = "default";
         this.snapshot = new Snapshot(0);
+        this.id = 0;
+        logger.warn("No id specified for FilePersister");
+
     }
 
     public FilePersister(String filename) {
         this.filename = filename;
         this.snapshot = new Snapshot(0);
-        logger.info("Snapshots will be written to folder snapshots/");
+        this.id = 0;
+        logger.warn("No id specified for FilePersister");
+    }
+
+    public FilePersister(int id) {
+        this.filename = "raft-" + Integer.toString(id);
+        this.snapshot = new Snapshot(0);
+        this.id = id;
     }
     
     public void readSnapshot() {
@@ -39,7 +50,9 @@ public class FilePersister {
         File[] files = folder.listFiles();
         File latestFile = null;
         for (File file : files) {
-            if (file.isFile() && (latestFile == null || file.getName().compareTo(latestFile.getName()) > 0)) {
+            if (file.isFile() 
+                && (latestFile == null || file.getName().compareTo(latestFile.getName()) > 0)
+                && file.getName().startsWith("raft-" + id)) {
                 latestFile = file;
             }
         }

@@ -60,3 +60,8 @@ In the first situation, `KvServer` will get an immediantly `ok = false` tag, dri
 Even the raft nodes commited the logs, client may wait for sometime if the `KvServer` has not applied the logs. 
 
 If a request is failed, the client will resend the request.
+
+## Reference
+
+- http://nil.csail.mit.edu/6.824/2020/index.html
+- http://nil.csail.mit.edu/6.824/2020/papers/raft-extended.pdf

@@ -238,7 +238,7 @@ public class RaftNode {
 
         this.lastIncludedIndex = -1;
         this.lastIncludedTerm = -1;
-        this.persister = new FilePersister();
+        this.persister = new FilePersister(id);
 
         Yaml yaml = new Yaml();
         try {
@@ -371,7 +371,7 @@ public class RaftNode {
 
     @Synchronized("mutex")
     private void startInstallSnapshot() {
-        Snapshot snapshot = new Snapshot(1024);
+        Snapshot snapshot = new Snapshot(1024 * 1024);
         int installIndex = Math.min(Math.min(commitIndex, Collections.min(nextIndex) - 1), lastApplied);
         snapshot.setLastIncludedIndex(installIndex);
         snapshot.setLastIncludedTerm(getLogByIndex(installIndex).getTerm());
